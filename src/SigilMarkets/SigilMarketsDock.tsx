@@ -1,7 +1,7 @@
 // SigilMarkets/SigilMarketsDock.tsx
 "use client";
 
-import React, { useMemo } from "react";
+import { useMemo } from "react";
 import type { KaiMoment } from "./types/marketTypes";
 import { useSigilMarketsUi } from "./state/uiStore";
 import { useActiveVault } from "./state/vaultStore";

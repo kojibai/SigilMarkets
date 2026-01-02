@@ -10,14 +10,14 @@
  * - Provide a simple interface for:
  *   - proposing a resolution (optional)
  *   - finalizing a resolution
- * - In standalone mode, this can be purely local/admin.
- * - In integrated deployments, this will be backed by your Phi Network endpoints.
  *
  * This module intentionally does NOT decide policy.
  * It just transports/normalizes "resolution objects" for stores to apply.
  */
 
 import type { KaiMoment, KaiPulse, MarketId, MarketOutcome } from "../types/marketTypes";
+import { asEvidenceHash } from "../types/marketTypes";
+
 import type {
   EvidenceBundle,
   EvidenceItem,
@@ -25,22 +25,21 @@ import type {
   OracleResolutionProposal,
   OracleSig,
   OracleSigner,
-  ResolutionSigilArtifact,
   ResolutionSigilPayloadV1,
+  EvidenceUrl,
 } from "../types/oracleTypes";
-import { asEvidenceBundleHash, asOracleDecisionId, asOracleSig } from "../types/oracleTypes";
+
+import { asEvidenceBundleHash, asEvidenceUrl, asOracleDecisionId } from "../types/oracleTypes";
 import type { MarketOraclePolicy } from "../types/marketTypes";
-import type { KaiSignature, SvgHash, UserPhiKey } from "../types/vaultTypes";
-import { asKaiSignature, asSvgHash, asUserPhiKey } from "../types/vaultTypes";
+import type { KaiSignature, UserPhiKey } from "../types/vaultTypes";
 import { sha256Hex } from "../utils/ids";
 
 type UnknownRecord = Record<string, unknown>;
-const isRecord = (v: unknown): v is UnknownRecord => typeof v === "object" && v !== null;
 const isString = (v: unknown): v is string => typeof v === "string";
-const isNumber = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
-const isEvidenceUrl = (item: EvidenceItem): item is EvidenceItem & { kind: "url" } => item.kind === "url";
-const isEvidenceHash = (item: EvidenceItem): item is EvidenceItem & { kind: "hash" } => item.kind === "hash";
+/** Typed guards (safe + clean) */
+const isUrlItem = (item: EvidenceItem): item is Extract<EvidenceItem, { kind: "url" }> => item.kind === "url";
+const isHashItem = (item: EvidenceItem): item is Extract<EvidenceItem, { kind: "hash" }> => item.kind === "hash";
 
 export type SigilMarketsOracleApiConfig = Readonly<{
   /** Optional remote base for oracle actions. If absent, oracleApi is local-only. */
@@ -57,36 +56,76 @@ export type OracleActionResult<T> =
 
 export const defaultOracleApiConfig = (): SigilMarketsOracleApiConfig => {
   const g = globalThis as unknown as UnknownRecord;
-  const base = isString(g["__SIGIL_MARKETS_ORACLE_API_BASE__"]) ? (g["__SIGIL_MARKETS_ORACLE_API_BASE__"] as string) : undefined;
+  const base = isString(g["__SIGIL_MARKETS_ORACLE_API_BASE__"])
+    ? (g["__SIGIL_MARKETS_ORACLE_API_BASE__"] as string)
+    : undefined;
+
   return { baseUrl: base, proposePath: "/oracle/propose", finalizePath: "/oracle/finalize" };
 };
 
-/** Canonicalize minimal evidence bundle and optionally compute a bundle hash. */
+/**
+ * Canonicalize minimal evidence bundle and optionally compute a bundle hash.
+ *
+ * Fix:
+ * - Produces real EvidenceItem types (EvidenceUrl / EvidenceHash branded values).
+ * - Uses EvidenceUrl explicitly (no unused import).
+ */
 export const canonicalizeEvidenceBundle = async (bundle?: EvidenceBundle): Promise<EvidenceBundle | undefined> => {
   if (!bundle) return undefined;
 
-  const items = bundle.items
-    .map((it) => {
-      if (it.kind === "url") {
-        return { kind: "url" as const, url: (it.url as unknown as string).trim(), label: it.label, note: it.note };
-      }
-      return { kind: "hash" as const, hash: (it.hash as unknown as string).trim(), label: it.label, note: it.note };
-    })
-    .filter((it) => (it.kind === "url" ? it.url.length > 0 : it.hash.length > 0));
+  const normalized: EvidenceItem[] = [];
 
+  for (const it of bundle.items) {
+    if (it.kind === "url") {
+      const raw = (it.url as unknown as string).trim();
+      if (raw.length === 0) continue;
+
+      // ✅ Use the branded EvidenceUrl type explicitly
+      const url: EvidenceUrl = asEvidenceUrl(raw);
+
+      normalized.push({
+        kind: "url",
+        url,
+        label: it.label,
+        note: it.note,
+      });
+      continue;
+    }
+
+    // hash
+    const raw = (it.hash as unknown as string).trim();
+    if (raw.length === 0) continue;
+
+    normalized.push({
+      kind: "hash",
+      hash: asEvidenceHash(raw),
+      label: it.label,
+      note: it.note,
+    });
+  }
+
+  // Data used for hashing: stable minimal representation (no label/note).
   const data = {
-    items: items.map((it) => (it.kind === "url" ? { kind: it.kind, url: it.url } : { kind: it.kind, hash: it.hash })),
+    items: normalized.map((it) =>
+      it.kind === "url"
+        ? { kind: "url" as const, url: it.url }
+        : { kind: "hash" as const, hash: it.hash },
+    ),
     summary: bundle.summary ?? "",
   };
 
   const bundleHash = await sha256Hex(JSON.stringify(data));
-  return { ...bundle, items, bundleHash: asEvidenceBundleHash(bundleHash) };
+
+  return {
+    items: normalized,
+    summary: bundle.summary,
+    bundleHash: asEvidenceBundleHash(bundleHash),
+  };
 };
 
 /**
  * Local "proposal" creation:
  * - Generates deterministic decisionId from (marketId, outcome, proposedPulse, oracle provider)
- * - Attestation is optional for MVP
  */
 export const createLocalProposal = async (args: Readonly<{
   marketId: MarketId;
@@ -128,10 +167,9 @@ export const createLocalFinalization = async (args: Readonly<{
 }>): Promise<OracleResolutionFinal> => {
   const ev = await canonicalizeEvidenceBundle(args.evidence ?? args.proposal?.evidence);
 
-  const baseKey =
-    args.proposal
-      ? `SM:ORACLE:FINAL:${args.proposal.decisionId}:${args.finalPulse}`
-      : `SM:ORACLE:FINAL:${args.marketId}:${args.outcome}:${args.finalPulse}:${args.oracle.provider}:${args.oracle.oracleId ?? ""}`;
+  const baseKey = args.proposal
+    ? `SM:ORACLE:FINAL:${args.proposal.decisionId}:${args.finalPulse}`
+    : `SM:ORACLE:FINAL:${args.marketId}:${args.outcome}:${args.finalPulse}:${args.oracle.provider}:${args.oracle.oracleId ?? ""}`;
 
   const h = await sha256Hex(baseKey);
   const decisionId = args.proposal ? args.proposal.decisionId : asOracleDecisionId(`dec_${h.slice(0, 40)}`);
@@ -177,8 +215,8 @@ export const makeResolutionSigilPayload = async (args: Readonly<{
     evidence: ev
       ? {
           bundleHash: ev.bundleHash,
-          urls: ev.items.filter(isEvidenceUrl).map((i) => i.url),
-          hashes: ev.items.filter(isEvidenceHash).map((i) => i.hash),
+          urls: ev.items.filter(isUrlItem).map((i) => (i.url as unknown as string)),
+          hashes: ev.items.filter(isHashItem).map((i) => (i.hash as unknown as string)),
           summary: ev.summary,
         }
       : undefined,
@@ -190,14 +228,19 @@ export const makeResolutionSigilPayload = async (args: Readonly<{
 };
 
 /**
- * Placeholder remote calls (optional):
- * - If you configure baseUrl, we can POST proposals/finalizations later.
- * For now, these return a clear error.
+ * Placeholder remote calls (optional).
+ * For now, these return a clear error (MVP local-only).
  */
-export const postProposal = async (_cfg: SigilMarketsOracleApiConfig, _proposal: OracleResolutionProposal): Promise<OracleActionResult<true>> => {
+export const postProposal = async (
+  _cfg: SigilMarketsOracleApiConfig,
+  _proposal: OracleResolutionProposal,
+): Promise<OracleActionResult<true>> => {
   return { ok: false, error: "remote oracle propose not implemented in MVP" };
 };
 
-export const postFinalization = async (_cfg: SigilMarketsOracleApiConfig, _final: OracleResolutionFinal): Promise<OracleActionResult<true>> => {
+export const postFinalization = async (
+  _cfg: SigilMarketsOracleApiConfig,
+  _final: OracleResolutionFinal,
+): Promise<OracleActionResult<true>> => {
   return { ok: false, error: "remote oracle finalize not implemented in MVP" };
 };

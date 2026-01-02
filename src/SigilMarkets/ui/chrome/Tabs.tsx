@@ -1,7 +1,7 @@
 // SigilMarkets/ui/chrome/Tabs.tsx
 "use client";
 
-import React, { useMemo } from "react";
+import { useMemo } from "react";
 
 export type TabOption<T extends string> = Readonly<{
   value: T;
@@ -17,7 +17,7 @@ export type TabsProps<T extends string> = Readonly<{
 
 const cx = (...p: Array<string | false | null | undefined>): string => p.filter(Boolean).join(" ");
 
-export const Tabs = <T extends string>(props: TabsProps<T>) => {
+export const Tabs = <T extends string,>(props: TabsProps<T>) => {
   const cls = useMemo(() => cx("sm-tabs", props.className), [props.className]);
 
   return (

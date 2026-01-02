@@ -35,6 +35,9 @@ export const TopBar = (props: TopBarProps) => {
 
   const cls = useMemo(() => cx("sm-topbar", sticky.t > 0.02 && "is-scrolled"), [sticky.t]);
 
+  const currentMarketId = state.route.view === "market" ? state.route.marketId : null;
+  const canSeal = Boolean(currentMarketId);
+
   return (
     <>
       <ToastHost />
@@ -62,8 +65,12 @@ export const TopBar = (props: TopBarProps) => {
             <Chip
               size="sm"
               selected={false}
-              onClick={() => actions.pushSheet({ id: "seal-prediction", marketId: state.route.view === "market" ? state.route.marketId : undefined })}
-              title="Seal a prophecy"
+              disabled={!canSeal}
+              onClick={() => {
+                if (!currentMarketId) return;
+                actions.pushSheet({ id: "seal-prediction", marketId: currentMarketId });
+              }}
+              title={canSeal ? "Seal a prophecy" : "Open a market to seal a prophecy"}
               left={<Icon name="spark" size={14} tone="gold" />}
             >
               Seal

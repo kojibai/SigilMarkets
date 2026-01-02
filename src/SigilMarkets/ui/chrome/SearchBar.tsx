@@ -1,42 +1,37 @@
-// SigilMarkets/ui/chrome/Tabs.tsx
+// SigilMarkets/ui/chrome/SearchBar.tsx
 "use client";
 
-import React, { useMemo } from "react";
+import { useMemo } from "react";
+import { Icon } from "../atoms/Icon";
 
-export type TabOption<T extends string> = Readonly<{
-  value: T;
-  label: string;
-}>;
-
-export type TabsProps<T extends string> = Readonly<{
-  value: T;
-  options: readonly TabOption<T>[];
-  onChange: (next: T) => void;
+export type SearchBarProps = Readonly<{
+  value: string;
+  onChange: (next: string) => void;
+  placeholder?: string;
   className?: string;
+  disabled?: boolean;
 }>;
 
 const cx = (...p: Array<string | false | null | undefined>): string => p.filter(Boolean).join(" ");
 
-export const Tabs = <T extends string>(props: TabsProps<T>) => {
-  const cls = useMemo(() => cx("sm-tabs", props.className), [props.className]);
+export const SearchBar = (props: SearchBarProps) => {
+  const cls = useMemo(() => cx("sm-search", props.className), [props.className]);
 
   return (
-    <div className={cls} role="tablist">
-      {props.options.map((o) => {
-        const active = o.value === props.value;
-        return (
-          <button
-            key={o.value}
-            type="button"
-            role="tab"
-            aria-selected={active}
-            className={cx("sm-tab", active && "is-active")}
-            onClick={() => props.onChange(o.value)}
-          >
-            {o.label}
-          </button>
-        );
-      })}
+    <div className={cls} role="search" aria-label="Search">
+      <span className="sm-search-ico" aria-hidden="true">
+        <Icon name="spark" size={14} tone="dim" />
+      </span>
+      <input
+        className="sm-search-in"
+        value={props.value}
+        onChange={(e) => props.onChange(e.target.value)}
+        placeholder={props.placeholder ?? "Search…"}
+        disabled={props.disabled}
+        inputMode="search"
+        autoComplete="off"
+        spellCheck={false}
+      />
     </div>
   );
 };

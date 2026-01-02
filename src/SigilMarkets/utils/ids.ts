@@ -23,12 +23,6 @@ type UnknownRecord = Record<string, unknown>;
 
 const getGlobal = (): UnknownRecord => globalThis as unknown as UnknownRecord;
 
-const hasCrypto = (): boolean => {
-  const g = getGlobal();
-  const c = g["crypto"];
-  return typeof c === "object" && c !== null;
-};
-
 const getCrypto = (): Crypto | null => {
   const g = getGlobal();
   const c = g["crypto"];
@@ -79,19 +73,15 @@ const textEncode = (s: string): Uint8Array => {
 };
 
 /**
- * sha256Hex (async)
- * - Uses crypto.subtle when available.
- * - Falls back to a non-cryptographic 32-bit hash repeated (functional, not secure).
+ * IMPORTANT (TS / BufferSource):
+ * Some TS lib combos type Uint8Array as Uint8Array<ArrayBufferLike>, whose `.buffer` may be
+ * SharedArrayBuffer. WebCrypto's BufferSource expects ArrayBuffer (not SAB) in lib.dom types.
+ * We fix this by copying bytes into a fresh ArrayBuffer every time we digest.
  */
-export const sha256Hex = async (message: string): Promise<string> => {
-  if (hasSubtle()) {
-    const c = getCrypto();
-    if (!c) return fnvFallbackHex(message);
-    const data = textEncode(message);
-    const buf = await c.subtle.digest("SHA-256", data);
-    return bytesToHex(new Uint8Array(buf));
-  }
-  return fnvFallbackHex(message);
+const toArrayBufferCopy = (bytes: Uint8Array): ArrayBuffer => {
+  const ab = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(ab).set(bytes);
+  return ab;
 };
 
 /**
@@ -107,6 +97,24 @@ const fnvFallbackHex = (message: string): string => {
   const hex8 = h.toString(16).padStart(8, "0");
   // expand deterministically to 64 hex chars
   return (hex8 + hex8 + hex8 + hex8 + hex8 + hex8 + hex8 + hex8).slice(0, 64);
+};
+
+/**
+ * sha256Hex (async)
+ * - Uses crypto.subtle when available.
+ * - Falls back to a non-cryptographic hash (functional, not secure).
+ */
+export const sha256Hex = async (message: string): Promise<string> => {
+  if (hasSubtle()) {
+    const c = getCrypto();
+    if (!c) return fnvFallbackHex(message);
+
+    const bytes = textEncode(message);
+    const ab = toArrayBufferCopy(bytes); // always ArrayBuffer => satisfies BufferSource typing
+    const digest = await c.subtle.digest("SHA-256", ab);
+    return bytesToHex(new Uint8Array(digest));
+  }
+  return fnvFallbackHex(message);
 };
 
 export const makeRandomId = (prefix: string, bytes: number = 16): string => {

@@ -1,144 +1,137 @@
-// SigilMarkets/views/Vault/VaultPanel.tsx
+// SigilMarkets/views/Vault/VaultSigilCard.tsx
 "use client";
 
-import React, { useMemo, useState } from "react";
-import type { KaiMoment, VaultId } from "../../types/marketTypes";
-import { useSigilMarketsUi } from "../../state/uiStore";
-import { useScrollRestoration } from "../../hooks/useScrollRestoration";
-import { useVault, useVaultActions } from "../../hooks/useVault";
-
-import { TopBar } from "../../ui/chrome/TopBar";
+import { useMemo } from "react";
+import type { KaiMoment } from "../../types/marketTypes";
+import type { VaultRecord } from "../../types/vaultTypes";
 import { Card, CardContent } from "../../ui/atoms/Card";
-import { Button } from "../../ui/atoms/Button";
-import { Divider } from "../../ui/atoms/Divider";
+import { Chip } from "../../ui/atoms/Chip";
 import { Icon } from "../../ui/atoms/Icon";
+import { Button } from "../../ui/atoms/Button";
+import { shortHash, shortKey } from "../../utils/format";
+import { useSigilMarketsUi } from "../../state/uiStore";
 
-import { VaultSigilCard } from "./VaultSigilCard";
-import { VaultBalance } from "./VaultBalance";
-import { VaultLocks } from "./VaultLocks";
-import { VaultGrowthLine } from "./VaultGrowthLine";
-import { VaultStreak } from "./VaultStreak";
-import { VaultActions } from "./VaultActions";
-import { DepositWithdrawSheet } from "./DepositWithdrawSheet";
-
-export type VaultPanelProps = Readonly<{
-  vaultId?: VaultId;
+export type VaultSigilCardProps = Readonly<{
+  vault: VaultRecord;
   now: KaiMoment;
-  scrollMode: "window" | "container";
-  scrollRef: React.RefObject<HTMLDivElement | null> | null;
 }>;
 
-export const VaultPanel = (props: VaultPanelProps) => {
-  const { state: uiState, actions: ui } = useSigilMarketsUi();
+const statusTone = (s: VaultRecord["status"]): "default" | "gold" | "danger" => {
+  if (s === "frozen") return "danger";
+  return "gold";
+};
 
-  useScrollRestoration(uiState.route, {
-    mode: props.scrollMode,
-    containerRef: props.scrollRef ?? undefined,
-    restoreDelayMs: 0,
-  });
+export const VaultSigilCard = (props: VaultSigilCardProps) => {
+  const { actions: ui } = useSigilMarketsUi();
+  const v = props.vault;
 
-  const { vault, status, spendableMicro, lockedMicro, lockedCount, locks } = useVault(props.vaultId ?? null);
-  const vaultActions = useVaultActions();
+  const userKey = v.owner.userPhiKey as unknown as string;
+  const kaiSig = v.owner.kaiSignature as unknown as string;
 
-  const [dwOpen, setDwOpen] = useState<boolean>(false);
-  const [dwMode, setDwMode] = useState<"deposit" | "withdraw">("deposit");
+  const vaultId = v.vaultId as unknown as string;
+  const svgHash = v.owner.identitySigil?.svgHash ? (v.owner.identitySigil.svgHash as unknown as string) : null;
 
-  const title = "Vault";
-  const subtitle = useMemo(() => {
-    if (!vault) return "Inhale a glyph to activate";
-    return `spendable • ${vault.spendableMicro.toString()}μ`;
-  }, [vault]);
+  const title = useMemo(() => `Vault • ${shortKey(userKey)}`, [userKey]);
+  const sub = useMemo(() => `pulse ${props.now.pulse}`, [props.now.pulse]);
 
-  const onBack = (): void => {
-    ui.navigate({ view: "grid" });
+  const boundLabel = useMemo(() => (svgHash ? "identity bound" : "identity missing"), [svgHash]);
+
+  const copy = async (text: string, label: string): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(text);
+      ui.toast("success", "Copied", label);
+    } catch {
+      ui.toast("error", "Copy failed", "Clipboard not available");
+    }
   };
 
-  if (!vault) {
-    return (
-      <div className="sm-page" data-sm="vault">
-        <TopBar
-          title={title}
-          subtitle="No active vault"
-          now={props.now}
-          scrollMode={props.scrollMode}
-          scrollRef={props.scrollRef}
-          back
-          onBack={onBack}
-        />
-
-        <Card variant="glass" className="sm-vault-empty">
-          <CardContent>
-            <div className="sm-title">Inhale your glyph</div>
-            <div className="sm-subtitle" style={{ marginTop: 8 }}>
-              Your Vault is the value-layer bound to your identity sigil. It holds spendable Φ and locks Φ into positions.
-            </div>
-
-            <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <Button
-                variant="primary"
-                onClick={() => ui.pushSheet({ id: "inhale-glyph", reason: "vault" })}
-                leftIcon={<Icon name="scan" size={14} tone="cyan" />}
-              >
-                Inhale glyph
-              </Button>
-
-              <Button variant="ghost" onClick={() => ui.navigate({ view: "grid" })}>
-                Browse markets
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   return (
-    <div className="sm-page" data-sm="vault">
-      <TopBar
-        title={title}
-        subtitle={`locks • ${lockedCount} • pulse ${props.now.pulse}`}
-        now={props.now}
-        scrollMode={props.scrollMode}
-        scrollRef={props.scrollRef}
-        back
-        onBack={onBack}
-      />
+    <Card variant="glass" className="sm-vault-sigil sm-breathe-soft">
+      <CardContent>
+        <div className="sm-vault-sigil-top">
+          <div className="sm-vault-sigil-left">
+            <div className="sm-vault-sigil-title">{title}</div>
+            <div className="sm-vault-sigil-sub">{sub}</div>
+          </div>
 
-      <div className="sm-vault-stack">
-        <VaultSigilCard vault={vault} now={props.now} />
-
-        <div className="sm-vault-row">
-          <VaultBalance vault={vault} />
-          <VaultStreak vault={vault} now={props.now} />
+          <div className="sm-vault-sigil-badges">
+            <Chip size="sm" selected={false} variant="outline" tone={statusTone(v.status)} left={<Icon name="vault" size={14} tone="dim" />}>
+              {v.status}
+            </Chip>
+            <Chip size="sm" selected={false} variant="outline" left={<Icon name="spark" size={14} tone="dim" />}>
+              {boundLabel}
+            </Chip>
+          </div>
         </div>
 
-        <VaultGrowthLine vault={vault} now={props.now} />
+        <div className="sm-vault-sigil-meta">
+          <div className="sm-vault-sigil-line">
+            <span className="k">vaultId</span>
+            <span className="v mono">{shortHash(vaultId, 14, 10)}</span>
+          </div>
 
-        <VaultLocks vault={vault} />
+          <div className="sm-vault-sigil-line">
+            <span className="k">userPhiKey</span>
+            <span className="v mono">{shortHash(userKey, 14, 10)}</span>
+          </div>
 
-        <Divider />
+          <div className="sm-vault-sigil-line">
+            <span className="k">kaiSignature</span>
+            <span className="v mono">{shortHash(kaiSig, 14, 10)}</span>
+          </div>
 
-        <VaultActions
-          vault={vault}
-          now={props.now}
-          onDeposit={() => {
-            setDwMode("deposit");
-            setDwOpen(true);
-          }}
-          onWithdraw={() => {
-            setDwMode("withdraw");
-            setDwOpen(true);
-          }}
-        />
-      </div>
+          {svgHash ? (
+            <div className="sm-vault-sigil-line">
+              <span className="k">identity svgHash</span>
+              <span className="v mono">{shortHash(svgHash, 14, 10)}</span>
+            </div>
+          ) : null}
+        </div>
 
-      <DepositWithdrawSheet
-        open={dwOpen}
-        mode={dwMode}
-        onClose={() => setDwOpen(false)}
-        vault={vault}
-        now={props.now}
-      />
-    </div>
+        <div className="sm-vault-sigil-actions">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => void copy(vaultId, "VaultId copied")}
+            leftIcon={<Icon name="share" size={14} tone="dim" />}
+          >
+            Copy vaultId
+          </Button>
+
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => void copy(userKey, "UserPhiKey copied")}
+            leftIcon={<Icon name="share" size={14} tone="dim" />}
+          >
+            Copy userPhiKey
+          </Button>
+
+          {svgHash ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => void copy(svgHash, "Identity svgHash copied")}
+              leftIcon={<Icon name="share" size={14} tone="dim" />}
+            >
+              Copy svgHash
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              variant="primary"
+              onClick={() => ui.pushSheet({ id: "inhale-glyph", reason: "vault" })}
+              leftIcon={<Icon name="scan" size={14} tone="cyan" />}
+            >
+              Re-inhale
+            </Button>
+          )}
+        </div>
+
+        <div className="sm-small" style={{ marginTop: 10 }}>
+          Your Vault is the value-layer bound to your identity sigil. Positions lock Φ into it; wins grow it; losses consume locks.
+        </div>
+      </CardContent>
+    </Card>
   );
 };

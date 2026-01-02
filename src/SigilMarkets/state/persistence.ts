@@ -149,11 +149,15 @@ export const wrapEnvelope = <T extends JsonValue>(data: T, v: number): PersistEn
   data,
 });
 
+/**
+ * decodeEnvelope MUST NOT be constrained to JsonValue.
+ * The decoder defines the actual target type; the envelope is just a transport shell.
+ */
 export const decodeEnvelope = <T>(
   v: unknown,
   expectedVersion: number,
   decodeData: Decoder<T>,
-): PersistResult<ReadOnly<{ data: T; savedAtMs: number }>> => {
+): PersistResult<Readonly<{ data: T; savedAtMs: number }>> => {
   if (!isRecord(v)) return { ok: false, error: "envelope: not an object" };
   const ver = v["v"];
   const savedAtMs = v["savedAtMs"];

@@ -1,4 +1,4 @@
-// SigilMarkets/state/uiStore.ts
+// SigilMarkets/state/uiStore.tsx
 "use client";
 
 /* eslint-disable @typescript-eslint/consistent-type-definitions */
@@ -35,8 +35,15 @@ import {
   type ToastModel,
 } from "../types/uiTypes";
 
-import { asMarketId, asVaultId, type MarketId } from "../types/marketTypes";
+import { asMarketId, asVaultId, type MarketId, type VaultId } from "../types/marketTypes";
 import { asPositionId, type PositionId } from "../types/sigilPositionTypes";
+
+/**
+ * KaiPulse is used in UI-only affordances (e.g., toast annotations).
+ * If you already have a canonical KaiPulse brand type elsewhere, import it here
+ * and delete this alias.
+ */
+type KaiPulse = number;
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -47,6 +54,7 @@ const isBoolean = (v: unknown): v is boolean => typeof v === "boolean";
 
 const clampInt = (n: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, Math.floor(n)));
 
+/** UI-only time (not canonical Kai time). Used for debounce + toast ids. */
 const nowMs = (): number => {
   const t = Date.now();
   return Number.isFinite(t) ? t : 0;
@@ -270,7 +278,7 @@ const decodeToast = (v: unknown): PersistResult<ToastModel> => {
       kind: okKind,
       title,
       message: isString(message) ? message : undefined,
-      atPulse: isNumber(atPulse) ? atPulse : undefined,
+      atPulse: isNumber(atPulse) ? (Math.floor(atPulse) as KaiPulse) : undefined,
       ttlMs: isNumber(ttlMs) ? ttlMs : undefined,
     },
   };
@@ -280,7 +288,8 @@ const decodeUiState: Decoder<SigilMarketsUiState> = (v: unknown) => {
   if (!isRecord(v)) return { ok: false, error: "ui: not an object" };
 
   const themeRaw = v["theme"];
-  const theme: SigilMarketsTheme = themeRaw === "dark" || themeRaw === "light" || themeRaw === "auto" ? themeRaw : "auto";
+  const theme: SigilMarketsTheme =
+    themeRaw === "dark" || themeRaw === "light" || themeRaw === "auto" ? themeRaw : "auto";
 
   const hapticsEnabled = isBoolean(v["hapticsEnabled"]) ? v["hapticsEnabled"] : true;
   const sfxEnabled = isBoolean(v["sfxEnabled"]) ? v["sfxEnabled"] : true;
@@ -345,7 +354,11 @@ const decodeUiState: Decoder<SigilMarketsUiState> = (v: unknown) => {
 const UI_ENVELOPE_VERSION = 1;
 
 const loadUiState = (storage: StorageLike | null): SigilMarketsUiState => {
-  const res = loadFromStorage(SM_UI_STATE_KEY, (raw) => decodeEnvelope(raw, UI_ENVELOPE_VERSION, decodeUiState), storage);
+  const res = loadFromStorage(
+    SM_UI_STATE_KEY,
+    (raw) => decodeEnvelope(raw, UI_ENVELOPE_VERSION, decodeUiState),
+    storage,
+  );
   if (!res.ok || res.value === null) return defaultUiState();
 
   const env = res.value;
@@ -390,7 +403,12 @@ export type SigilMarketsUiActions = Readonly<{
   armConfetti: (armed: boolean) => void;
 
   /** Toasts */
-  toast: (kind: ToastKind, title: string, message?: string, opts?: Readonly<{ ttlMs?: number; atPulse?: KaiPulse }>) => void;
+  toast: (
+    kind: ToastKind,
+    title: string,
+    message?: string,
+    opts?: Readonly<{ ttlMs?: number; atPulse?: KaiPulse }>,
+  ) => void;
   dismissToast: (id: ToastModel["id"]) => void;
   clearToasts: () => void;
 
@@ -412,6 +430,12 @@ export const SigilMarketsUiProvider = (props: Readonly<{ children: React.ReactNo
 
   const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastPersistedJsonRef = useRef<string>("");
+
+  useEffect(() => {
+    return () => {
+      if (persistTimer.current) clearTimeout(persistTimer.current);
+    };
+  }, []);
 
   const schedulePersist = useCallback(
     (next: SigilMarketsUiState) => {
@@ -449,10 +473,15 @@ export const SigilMarketsUiProvider = (props: Readonly<{ children: React.ReactNo
     const onStorage = (e: StorageEvent): void => {
       if (e.key !== SM_UI_STATE_KEY) return;
       if (e.newValue === null) return;
-      const parsed = JSON.parse(e.newValue) as unknown;
-      const env = decodeEnvelope(parsed, UI_ENVELOPE_VERSION, decodeUiState);
-      if (!env.ok) return;
-      setState(env.value.data);
+
+      try {
+        const parsed = JSON.parse(e.newValue) as unknown;
+        const env = decodeEnvelope(parsed, UI_ENVELOPE_VERSION, decodeUiState);
+        if (!env.ok) return;
+        setState(env.value.data);
+      } catch {
+        // Ignore malformed storage events
+      }
     };
 
     window.addEventListener("storage", onStorage);
@@ -531,7 +560,9 @@ export const SigilMarketsUiProvider = (props: Readonly<{ children: React.ReactNo
 
     const setCloseWithinPulses = (pulses?: number): void => {
       const v =
-        typeof pulses === "number" && Number.isFinite(pulses) && pulses > 0 ? clampInt(pulses, 1, 1_000_000_000) : undefined;
+        typeof pulses === "number" && Number.isFinite(pulses) && pulses > 0
+          ? clampInt(pulses, 1, 1_000_000_000)
+          : undefined;
       setAndPersist((s) => ({
         ...s,
         grid: { ...s.grid, filters: { ...s.grid.filters, closeWithinPulses: v } },
@@ -565,8 +596,10 @@ export const SigilMarketsUiProvider = (props: Readonly<{ children: React.ReactNo
       opts?: Readonly<{ ttlMs?: number; atPulse?: KaiPulse }>,
     ): void => {
       const id = asToastId(genToastId());
-      const ttlMs = typeof opts?.ttlMs === "number" && Number.isFinite(opts.ttlMs) ? Math.max(500, Math.floor(opts.ttlMs)) : 2600;
-      const atPulse = typeof opts?.atPulse === "number" && Number.isFinite(opts.atPulse) ? Math.floor(opts.atPulse) : undefined;
+      const ttlMs =
+        typeof opts?.ttlMs === "number" && Number.isFinite(opts.ttlMs) ? Math.max(500, Math.floor(opts.ttlMs)) : 2600;
+      const atPulse =
+        typeof opts?.atPulse === "number" && Number.isFinite(opts.atPulse) ? (Math.floor(opts.atPulse) as KaiPulse) : undefined;
 
       setAndPersist((s) => ({
         ...s,

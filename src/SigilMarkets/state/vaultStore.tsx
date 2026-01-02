@@ -1,4 +1,4 @@
-// SigilMarkets/state/vaultStore.ts
+// SigilMarkets/state/vaultStore.tsx
 "use client";
 
 /* eslint-disable @typescript-eslint/consistent-type-definitions */
@@ -13,7 +13,17 @@
  * - Persist offline-first to local storage
  */
 
-import React, { createContext, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useContext,
+  type ReactNode,
+} from "react";
+
 import {
   SM_VAULTS_KEY,
   decodeEnvelope,
@@ -31,13 +41,13 @@ import type { KaiMoment, KaiPulse, LockId, PhiMicro, VaultId } from "../types/ma
 import { asVaultId } from "../types/marketTypes";
 
 import {
+  asIdentitySigilId,
   asKaiSignature,
   asMicroDecimalString,
   asSvgHash,
   asUserPhiKey,
-  isVaultLockReason,
+  type IdentitySigilId,
   type KaiSignature,
-  type IdentitySigilRef,
   type MicroDecimalString,
   type SerializedVaultRecord,
   type SvgHash,
@@ -101,6 +111,8 @@ const sortVaultIds = (byId: Readonly<Record<string, VaultRecord>>): VaultId[] =>
   return arr.map((x) => asVaultId(x.id));
 };
 
+const vaultKey = (id: VaultId): string => id as unknown as string;
+
 /** ------------------------------
  * Cache shapes
  * ------------------------------ */
@@ -150,9 +162,10 @@ const decodeSerializedVaultRecord: Decoder<SerializedVaultRecord> = (v: unknown)
 
       if (!isString(lockId) || lockId.length === 0) continue;
       if (lStatus !== "locked" && lStatus !== "released" && lStatus !== "burned" && lStatus !== "paid" && lStatus !== "refunded") continue;
-      if (!isVaultLockReason(reason)) continue;
+      if (!isString(reason) || reason.length === 0) continue;
       if (amount === null) continue;
       if (!isRecord(createdAt)) continue;
+
       const pulse = createdAt["pulse"];
       const beat = createdAt["beat"];
       const stepIndex = createdAt["stepIndex"];
@@ -173,11 +186,12 @@ const decodeSerializedVaultRecord: Decoder<SerializedVaultRecord> = (v: unknown)
     }
   }
 
+  // owner.identitySigil (optional)
   const identitySigilRaw = ownerRaw["identitySigil"];
   const identitySigil =
     isRecord(identitySigilRaw) && isString(identitySigilRaw["svgHash"])
       ? {
-          sigilId: isString(identitySigilRaw["sigilId"]) ? identitySigilRaw["sigilId"] : undefined,
+          sigilId: isString(identitySigilRaw["sigilId"]) ? asIdentitySigilId(identitySigilRaw["sigilId"]) : undefined,
           svgHash: asSvgHash(identitySigilRaw["svgHash"]),
           url: isString(identitySigilRaw["url"]) ? identitySigilRaw["url"] : undefined,
         }
@@ -195,7 +209,9 @@ const decodeSerializedVaultRecord: Decoder<SerializedVaultRecord> = (v: unknown)
           totalLosses: isNumber(statsRaw["totalLosses"]) ? clampInt(statsRaw["totalLosses"], 0, 1_000_000_000) : 0,
           totalClaims: isNumber(statsRaw["totalClaims"]) ? clampInt(statsRaw["totalClaims"], 0, 1_000_000_000) : 0,
           totalRefunds: isNumber(statsRaw["totalRefunds"]) ? clampInt(statsRaw["totalRefunds"], 0, 1_000_000_000) : 0,
-          lastOutcomePulse: isNumber(statsRaw["lastOutcomePulse"]) ? Math.max(0, Math.floor(statsRaw["lastOutcomePulse"])) : undefined,
+          lastOutcomePulse: isNumber(statsRaw["lastOutcomePulse"])
+            ? Math.max(0, Math.floor(statsRaw["lastOutcomePulse"]))
+            : undefined,
         }
       : undefined;
 
@@ -267,7 +283,11 @@ const deserializeVaultRecord = (v: SerializedVaultRecord): VaultRecord => {
       kaiSignature: v.owner.kaiSignature,
       zkProofRef: v.owner.zkProofRef,
       identitySigil: v.owner.identitySigil
-        ? { sigilId: v.owner.identitySigil.sigilId, svgHash: v.owner.identitySigil.svgHash, url: v.owner.identitySigil.url }
+        ? {
+            sigilId: v.owner.identitySigil.sigilId,
+            svgHash: v.owner.identitySigil.svgHash,
+            url: v.owner.identitySigil.url,
+          }
         : undefined,
     },
     status: v.status,
@@ -305,7 +325,9 @@ const serializeVaultRecord = (v: VaultRecord): SerializedVaultRecord => {
   };
 };
 
-const loadCache = (storage: StorageLike | null): PersistResult<Readonly<{ state: SigilMarketsVaultState; savedAtMs?: number }>> => {
+const loadCache = (
+  storage: StorageLike | null,
+): PersistResult<Readonly<{ state: SigilMarketsVaultState; savedAtMs?: number }>> => {
   const res = loadFromStorage(
     SM_VAULTS_KEY,
     (raw) => decodeEnvelope(raw, CACHE_ENVELOPE_VERSION, decodeSerializedVaultCache),
@@ -322,11 +344,10 @@ const loadCache = (storage: StorageLike | null): PersistResult<Readonly<{ state:
     byId[id] = deserializeVaultRecord(sv);
   }
 
-  const idsFromCache = cache.ids.filter((id) => byId[id] !== undefined).map((id) => asVaultId(id));
+  const idsFromCache = cache.ids.filter((id: string) => byId[id] !== undefined).map((id: string) => asVaultId(id));
   const ids = idsFromCache.length > 0 ? idsFromCache : sortVaultIds(byId);
 
-  const activeVaultId =
-    cache.activeVaultId && byId[cache.activeVaultId] ? asVaultId(cache.activeVaultId) : null;
+  const activeVaultId = cache.activeVaultId && byId[cache.activeVaultId] ? asVaultId(cache.activeVaultId) : null;
 
   const state: SigilMarketsVaultState = {
     byId,
@@ -351,8 +372,8 @@ const persistCache = (storage: StorageLike | null, state: SigilMarketsVaultState
 
   const data: SerializedVaultCache = {
     byId,
-    ids: state.ids.map((id) => id as unknown as string),
-    activeVaultId: state.activeVaultId ? (state.activeVaultId as unknown as string) : undefined,
+    ids: state.ids.map((id: VaultId) => vaultKey(id)),
+    activeVaultId: state.activeVaultId ? vaultKey(state.activeVaultId) : undefined,
     lastUpdatedPulse: state.lastUpdatedPulse,
   };
 
@@ -395,7 +416,7 @@ export type CreateOrActivateVaultInput = Readonly<{
     userPhiKey: UserPhiKey;
     kaiSignature: KaiSignature;
     zkProofRef?: ZkProofRef;
-    identitySigil?: IdentitySigilRef;
+    identitySigil?: Readonly<{ sigilId?: IdentitySigilId; svgHash: SvgHash; url?: string }>;
   }>;
 
   /** If absent, vault starts at 0. */
@@ -461,7 +482,7 @@ export type SigilMarketsVaultStore = Readonly<{
 
 const SigilMarketsVaultContext = createContext<SigilMarketsVaultStore | null>(null);
 
-export const SigilMarketsVaultProvider = (props: Readonly<{ children: React.ReactNode }>) => {
+export const SigilMarketsVaultProvider = (props: Readonly<{ children: ReactNode }>) => {
   const storage = useMemo(() => getDefaultStorage(), []);
   const [state, setState] = useState<SigilMarketsVaultState>(() => {
     const loaded = loadCache(storage);
@@ -471,6 +492,14 @@ export const SigilMarketsVaultProvider = (props: Readonly<{ children: React.Reac
 
   const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastPersistMsRef = useRef<number>(0);
+
+  // cleanup pending timers
+  useEffect(() => {
+    return () => {
+      if (persistTimer.current) clearTimeout(persistTimer.current);
+      persistTimer.current = null;
+    };
+  }, []);
 
   const schedulePersist = useCallback(
     (next: SigilMarketsVaultState) => {
@@ -515,7 +544,9 @@ export const SigilMarketsVaultProvider = (props: Readonly<{ children: React.Reac
           byId[id] = deserializeVaultRecord(sv);
         }
 
-        const idsFromCache = env.value.data.ids.filter((id) => byId[id] !== undefined).map((id) => asVaultId(id));
+        const idsFromCache = env.value.data.ids
+          .filter((id: string) => byId[id] !== undefined)
+          .map((id: string) => asVaultId(id));
         const ids = idsFromCache.length > 0 ? idsFromCache : sortVaultIds(byId);
 
         const activeVaultId =
@@ -556,8 +587,7 @@ export const SigilMarketsVaultProvider = (props: Readonly<{ children: React.Reac
     };
 
     const createOrActivateVault = (input: CreateOrActivateVaultInput): VaultRecord => {
-      const key = input.vaultId as unknown as string;
-
+      const key = vaultKey(input.vaultId);
       let created: VaultRecord | null = null;
 
       setAndMaybePersist(
@@ -585,7 +615,11 @@ export const SigilMarketsVaultProvider = (props: Readonly<{ children: React.Reac
               kaiSignature: input.owner.kaiSignature,
               zkProofRef: input.owner.zkProofRef,
               identitySigil: input.owner.identitySigil
-                ? { svgHash: input.owner.identitySigil.svgHash, url: input.owner.identitySigil.url }
+                ? {
+                    sigilId: input.owner.identitySigil.sigilId,
+                    svgHash: input.owner.identitySigil.svgHash,
+                    url: input.owner.identitySigil.url,
+                  }
                 : undefined,
             },
             status: "active",
@@ -608,6 +642,7 @@ export const SigilMarketsVaultProvider = (props: Readonly<{ children: React.Reac
 
           const byId: Record<string, VaultRecord> = { ...prev.byId, [key]: v };
           const ids = [input.vaultId, ...prev.ids];
+
           return {
             ...prev,
             byId,
@@ -621,21 +656,22 @@ export const SigilMarketsVaultProvider = (props: Readonly<{ children: React.Reac
         true,
       );
 
-      // created is set inside updater synchronously
-      return created ?? {
-        vaultId: input.vaultId,
-        owner: input.owner,
-        status: "active",
-        spendableMicro: normalizePhi(input.initialSpendableMicro ?? 0n),
-        lockedMicro: 0n as PhiMicro,
-        locks: [],
-        createdPulse: input.createdPulse,
-        updatedPulse: input.createdPulse,
-      };
+      return (
+        created ?? {
+          vaultId: input.vaultId,
+          owner: input.owner,
+          status: "active",
+          spendableMicro: normalizePhi(input.initialSpendableMicro ?? 0n),
+          lockedMicro: 0n as PhiMicro,
+          locks: [],
+          createdPulse: input.createdPulse,
+          updatedPulse: input.createdPulse,
+        }
+      );
     };
 
     const moveValue = (req: Readonly<{ vaultId: VaultId; kind: "deposit" | "withdraw"; amountMicro: PhiMicro; atPulse: KaiPulse }>): PersistResult<VaultRecord> => {
-      const key = req.vaultId as unknown as string;
+      const key = vaultKey(req.vaultId);
       const amt = normalizePhi(req.amountMicro);
 
       if (amt === 0n) return { ok: false, error: "amount must be > 0" };
@@ -702,7 +738,7 @@ export const SigilMarketsVaultProvider = (props: Readonly<{ children: React.Reac
       positionId?: string;
       note?: string;
     }>): PersistResult<VaultRecord> => {
-      const key = req.vaultId as unknown as string;
+      const key = vaultKey(req.vaultId);
       const amt = normalizePhi(req.amountMicro);
       if (amt === 0n) return { ok: false, error: "lock amount must be > 0" };
 
@@ -725,7 +761,6 @@ export const SigilMarketsVaultProvider = (props: Readonly<{ children: React.Reac
             return prev;
           }
 
-          // prevent duplicate lock ids
           if (v.locks.some((l) => l.lockId === req.lockId)) {
             err = "duplicate lockId";
             return prev;
@@ -783,7 +818,7 @@ export const SigilMarketsVaultProvider = (props: Readonly<{ children: React.Reac
       updatedPulse: KaiPulse;
       note?: string;
     }>): PersistResult<VaultRecord> => {
-      const key = req.vaultId as unknown as string;
+      const key = vaultKey(req.vaultId);
 
       let out: VaultRecord | null = null;
       let err: string | null = null;
@@ -805,7 +840,6 @@ export const SigilMarketsVaultProvider = (props: Readonly<{ children: React.Reac
           const lock = v.locks[idx];
           const wasLocked = lock.status === "locked";
 
-          // Transition
           const nextLock: VaultLock = {
             ...lock,
             status: req.toStatus,
@@ -817,13 +851,11 @@ export const SigilMarketsVaultProvider = (props: Readonly<{ children: React.Reac
           const locks = v.locks.slice();
           locks[idx] = nextLock;
 
-          // If we transitioned from locked -> released, return funds to spendable.
           let spendable = v.spendableMicro;
           if (wasLocked && req.toStatus === "released") {
             spendable = normalizePhi(spendable + lock.amountMicro);
           }
 
-          // For burned/paid/refunded, locked value is removed from lockedMicro via calc.
           const lockedMicro = calcLockedMicro(locks);
 
           const next: VaultRecord = {
@@ -856,7 +888,7 @@ export const SigilMarketsVaultProvider = (props: Readonly<{ children: React.Reac
     };
 
     const applyOutcomeStats = (req: Readonly<{ vaultId: VaultId; outcome: "win" | "loss" | "refund"; atPulse: KaiPulse }>): PersistResult<VaultRecord> => {
-      const key = req.vaultId as unknown as string;
+      const key = vaultKey(req.vaultId);
 
       let out: VaultRecord | null = null;
       let err: string | null = null;
@@ -929,14 +961,14 @@ export const SigilMarketsVaultProvider = (props: Readonly<{ children: React.Reac
     };
 
     const removeVault = (vaultId: VaultId): void => {
-      const key = vaultId as unknown as string;
+      const key = vaultKey(vaultId);
       setAndMaybePersist(
         (prev) => {
           if (!prev.byId[key]) return prev;
           const byId: Record<string, VaultRecord> = { ...prev.byId };
           delete byId[key];
-          const ids = prev.ids.filter((id) => (id as unknown as string) !== key);
-          const activeVaultId = prev.activeVaultId && (prev.activeVaultId as unknown as string) === key ? null : prev.activeVaultId;
+          const ids = prev.ids.filter((id: VaultId) => vaultKey(id) !== key);
+          const activeVaultId = prev.activeVaultId && vaultKey(prev.activeVaultId) === key ? null : prev.activeVaultId;
           return { ...prev, byId, ids, activeVaultId };
         },
         true,
@@ -985,7 +1017,7 @@ export const SigilMarketsVaultProvider = (props: Readonly<{ children: React.Reac
 };
 
 export const useSigilMarketsVaultStore = (): SigilMarketsVaultStore => {
-  const ctx = React.useContext(SigilMarketsVaultContext);
+  const ctx = useContext(SigilMarketsVaultContext);
   if (!ctx) throw new Error("useSigilMarketsVaultStore must be used within <SigilMarketsVaultProvider>");
   return ctx;
 };
@@ -993,10 +1025,10 @@ export const useSigilMarketsVaultStore = (): SigilMarketsVaultStore => {
 export const useActiveVault = (): VaultRecord | null => {
   const { state } = useSigilMarketsVaultStore();
   if (!state.activeVaultId) return null;
-  return state.byId[state.activeVaultId as unknown as string] ?? null;
+  return state.byId[vaultKey(state.activeVaultId)] ?? null;
 };
 
 export const useVaultById = (vaultId: VaultId): VaultRecord | null => {
   const { state } = useSigilMarketsVaultStore();
-  return state.byId[vaultId as unknown as string] ?? null;
+  return state.byId[vaultKey(vaultId)] ?? null;
 };

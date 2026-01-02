@@ -56,6 +56,20 @@ export type ShareMicro = bigint;
  */
 export type PriceMicro = PhiMicro;
 
+/**
+ * Decimal string encoding for bigint micro units in JSON.
+ * Canonical: non-negative base-10 integer, no leading zeros except "0".
+ */
+export type MicroDecimalString = Brand<string, "MicroDecimalString">;
+
+export const asMicroDecimalString = (v: string): MicroDecimalString => {
+  const s = v.trim();
+  if (!/^(0|[1-9]\d*)$/.test(s)) {
+    throw new Error(`invalid MicroDecimalString: ${v}`);
+  }
+  return s as MicroDecimalString;
+};
+
 export const ONE_PHI_MICRO: PhiMicro = 1_000_000n;
 export const ONE_SHARE_MICRO: ShareMicro = 1_000_000n;
 

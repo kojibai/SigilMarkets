@@ -7,13 +7,9 @@
  * SigilMarkets — positionStore
  *
  * Responsibilities:
- * - Hold PositionRecords (wager receipts) + their lifecycle (open → claimable/lost/refundable → claimed/refunded)
+ * - Hold PositionRecords + lifecycle (open → claimable/lost/refundable → claimed/refunded)
  * - Persist offline-first to local storage
  * - Apply market resolution snapshots to all positions for a market
- *
- * Non-goals:
- * - Executing vault balance movements (vaultStore does that)
- * - Rendering / minting sigils (sigils/* does that)
  */
 
 import React, { createContext, useEffect, useMemo, useRef, useState } from "react";
@@ -37,9 +33,12 @@ import type {
   MarketOutcome,
   PhiMicro,
   VaultId,
+  LockId,
+  ShareMicro,
+  PriceMicro,
 } from "../types/marketTypes";
 
-import { asLockId, asMarketId } from "../types/marketTypes";
+import { asEvidenceHash, asLockId, asMarketId, asVaultId } from "../types/marketTypes";
 
 import type {
   PositionId,
@@ -63,7 +62,7 @@ type UnknownRecord = Record<string, unknown>;
 const isRecord = (v: unknown): v is UnknownRecord => typeof v === "object" && v !== null;
 const isString = (v: unknown): v is string => typeof v === "string";
 const isNumber = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
-const isArray = (v: unknown): v is unknown[] => Array.isArray(v);
+const isArray = (v: unknown): v is readonly unknown[] => Array.isArray(v);
 
 const parseBigIntDec = (v: unknown): bigint | null => {
   if (typeof v === "bigint") return v;
@@ -78,7 +77,7 @@ const parseBigIntDec = (v: unknown): bigint | null => {
   }
 };
 
-const biToDec = (v: bigint): MicroDecimalString => asMicroDecimalString(v.toString(10));
+const biToDec = (v: bigint): MicroDecimalString => asMicroDecimalString((v < 0n ? 0n : v).toString(10));
 
 const normalizePhi = (v: bigint): PhiMicro => (v < 0n ? (0n as PhiMicro) : (v as PhiMicro));
 
@@ -110,16 +109,16 @@ const serializePositionRecord = (p: PositionRecord): SerializedPositionRecord =>
   lock: {
     vaultId: p.lock.vaultId,
     lockId: p.lock.lockId,
-    lockedStakeMicro: biToDec(p.lock.lockedStakeMicro),
+    lockedStakeMicro: biToDec(p.lock.lockedStakeMicro as unknown as bigint),
   },
   entry: {
     side: p.entry.side,
-    stakeMicro: biToDec(p.entry.stakeMicro),
-    feeMicro: biToDec(p.entry.feeMicro),
-    totalCostMicro: biToDec(p.entry.totalCostMicro),
-    sharesMicro: biToDec(p.entry.sharesMicro),
-    avgPriceMicro: biToDec(p.entry.avgPriceMicro),
-    worstPriceMicro: biToDec(p.entry.worstPriceMicro),
+    stakeMicro: biToDec(p.entry.stakeMicro as unknown as bigint),
+    feeMicro: biToDec(p.entry.feeMicro as unknown as bigint),
+    totalCostMicro: biToDec(p.entry.totalCostMicro as unknown as bigint),
+    sharesMicro: biToDec(p.entry.sharesMicro as unknown as bigint),
+    avgPriceMicro: biToDec(p.entry.avgPriceMicro as unknown as bigint),
+    worstPriceMicro: biToDec(p.entry.worstPriceMicro as unknown as bigint),
     venue: p.entry.venue,
     openedAt: p.entry.openedAt,
     marketDefinitionHash: p.entry.marketDefinitionHash,
@@ -138,8 +137,8 @@ const serializePositionRecord = (p: PositionRecord): SerializedPositionRecord =>
   settlement: p.settlement
     ? {
         settledPulse: p.settlement.settledPulse,
-        creditedMicro: biToDec(p.settlement.creditedMicro),
-        debitedMicro: biToDec(p.settlement.debitedMicro),
+        creditedMicro: biToDec(p.settlement.creditedMicro as unknown as bigint),
+        debitedMicro: biToDec(p.settlement.debitedMicro as unknown as bigint),
         note: p.settlement.note,
       }
     : undefined,
@@ -173,23 +172,22 @@ const deserializeEntry = (v: unknown): PersistResult<PositionEntrySnapshot> => {
   const stepIndex = openedAt["stepIndex"];
   if (!isNumber(pulse) || !isNumber(beat) || !isNumber(stepIndex)) return { ok: false, error: "entry.openedAt: bad fields" };
 
-  const marketDefinitionHash = isString(v["marketDefinitionHash"]) ? (v["marketDefinitionHash"] as EvidenceHash) : undefined;
+  const marketDefinitionHash = isString(v["marketDefinitionHash"]) ? asEvidenceHash(v["marketDefinitionHash"]) : undefined;
 
-  return {
-    ok: true,
-    value: {
-      side,
-      stakeMicro: normalizePhi(stake),
-      feeMicro: normalizePhi(fee),
-      totalCostMicro: normalizePhi(total),
-      sharesMicro: shares as unknown as bigint,
-      avgPriceMicro: avg as unknown as bigint,
-      worstPriceMicro: worst as unknown as bigint,
-      venue,
-      openedAt: { pulse: Math.max(0, Math.floor(pulse)), beat: Math.floor(beat), stepIndex: Math.floor(stepIndex) },
-      marketDefinitionHash,
-    } as PositionEntrySnapshot,
+  const entry: PositionEntrySnapshot = {
+    side,
+    stakeMicro: normalizePhi(stake),
+    feeMicro: normalizePhi(fee),
+    totalCostMicro: normalizePhi(total),
+    sharesMicro: (shares as unknown) as ShareMicro,
+    avgPriceMicro: (avg as unknown) as PriceMicro,
+    worstPriceMicro: (worst as unknown) as PriceMicro,
+    venue,
+    openedAt: { pulse: Math.max(0, Math.floor(pulse)), beat: Math.floor(beat), stepIndex: Math.floor(stepIndex) },
+    marketDefinitionHash,
   };
+
+  return { ok: true, value: entry };
 };
 
 const deserializeLock = (v: unknown): PersistResult<PositionLockRef> => {
@@ -202,14 +200,13 @@ const deserializeLock = (v: unknown): PersistResult<PositionLockRef> => {
   if (!isString(lockId) || lockId.length === 0) return { ok: false, error: "lock.lockId: bad" };
   if (lockedStake === null) return { ok: false, error: "lock.lockedStakeMicro: bad" };
 
-  return {
-    ok: true,
-    value: {
-      vaultId: vaultId as unknown as VaultId,
-      lockId: asLockId(lockId),
-      lockedStakeMicro: normalizePhi(lockedStake),
-    },
+  const lock: PositionLockRef = {
+    vaultId: asVaultId(vaultId),
+    lockId: asLockId(lockId),
+    lockedStakeMicro: normalizePhi(lockedStake),
   };
+
+  return { ok: true, value: lock };
 };
 
 const deserializeResolution = (v: unknown): PersistResult<PositionResolutionSnapshot | undefined> => {
@@ -227,7 +224,9 @@ const deserializeResolution = (v: unknown): PersistResult<PositionResolutionSnap
 
   const evidenceHashesRaw = v["evidenceHashes"];
   const evidenceHashes: EvidenceHash[] | undefined = isArray(evidenceHashesRaw)
-    ? evidenceHashesRaw.filter((x): x is string => isString(x) && x.length > 0).map((s) => s as EvidenceHash)
+    ? evidenceHashesRaw
+        .filter((x): x is string => isString(x) && x.length > 0)
+        .map((s: string) => asEvidenceHash(s))
     : undefined;
 
   return {
@@ -279,9 +278,9 @@ const deserializePositionRecord: Decoder<PositionRecord> = (v: unknown) => {
   const entryRes = deserializeEntry(v["entry"]);
   if (!entryRes.ok) return { ok: false, error: entryRes.error };
 
-  const payoutModel = v["payoutModel"];
-  const okPayout: PositionPayoutModel =
-    payoutModel === "parimutuel" || payoutModel === "void-refund" ? payoutModel : "amm-shares";
+  const payoutModelRaw = v["payoutModel"];
+  const payoutModel: PositionPayoutModel =
+    payoutModelRaw === "parimutuel" || payoutModelRaw === "void-refund" ? payoutModelRaw : "amm-shares";
 
   const status = v["status"];
   if (!isPositionStatus(status)) return { ok: false, error: "position.status: bad" };
@@ -293,7 +292,6 @@ const deserializePositionRecord: Decoder<PositionRecord> = (v: unknown) => {
   if (!settlementRes.ok) return { ok: false, error: settlementRes.error };
 
   const updatedPulse = isNumber(v["updatedPulse"]) ? Math.max(0, Math.floor(v["updatedPulse"])) : entryRes.value.openedAt.pulse;
-
   const sigil = isRecord(v["sigil"]) ? (v["sigil"] as PositionSigilArtifact) : undefined;
 
   return {
@@ -303,7 +301,7 @@ const deserializePositionRecord: Decoder<PositionRecord> = (v: unknown) => {
       marketId: asMarketId(marketId),
       lock: lockRes.value,
       entry: entryRes.value,
-      payoutModel: okPayout,
+      payoutModel,
       status,
       resolution: resolutionRes.value,
       settlement: settlementRes.value,
@@ -319,7 +317,7 @@ type SerializedPositionsCache = Readonly<{
   lastUpdatedPulse?: KaiPulse;
 }>;
 
-const CACHE_ENVELOPE_VERSION = 1;
+const CACHE_VERSION = 1;
 
 const decodeSerializedCache: Decoder<SerializedPositionsCache> = (v: unknown) => {
   if (!isRecord(v)) return { ok: false, error: "cache: not object" };
@@ -344,7 +342,7 @@ const decodeSerializedCache: Decoder<SerializedPositionsCache> = (v: unknown) =>
 const loadCache = (storage: StorageLike | null): PersistResult<Readonly<{ state: SigilMarketsPositionState }>> => {
   const res = loadFromStorage(
     SM_POSITIONS_KEY,
-    (raw) => decodeEnvelope(raw, CACHE_ENVELOPE_VERSION, decodeSerializedCache),
+    (raw) => decodeEnvelope(raw, CACHE_VERSION, decodeSerializedCache),
     storage,
   );
   if (!res.ok) return { ok: false, error: res.error };
@@ -353,14 +351,16 @@ const loadCache = (storage: StorageLike | null): PersistResult<Readonly<{ state:
   const env = res.value;
   const cache = env.data;
 
-  // Salvage: decode positions per entry; skip bad ones.
   const byId: Record<string, PositionRecord> = {};
-  for (const [id, sv] of Object.entries(cache.byId)) {
+  for (const [key, sv] of Object.entries(cache.byId)) {
     const dp = deserializePositionRecord(sv);
-    if (dp.ok) byId[id] = dp.value;
+    if (dp.ok) byId[key] = dp.value;
   }
 
-  const idsFromCache = cache.ids.filter((id) => byId[id] !== undefined).map((id) => asPositionId(id));
+  const idsFromCache = cache.ids
+    .filter((id: string) => byId[id] !== undefined)
+    .map((id: string) => asPositionId(id));
+
   const ids = idsFromCache.length > 0 ? idsFromCache : sortPositionIds(byId);
 
   return {
@@ -382,23 +382,19 @@ const persistCache = (storage: StorageLike | null, state: SigilMarketsPositionSt
   if (!storage) return;
 
   const byId: Record<string, SerializedPositionRecord> = {};
-  for (const [id, p] of Object.entries(state.byId)) {
-    byId[id] = serializePositionRecord(p);
-  }
+  for (const [k, p] of Object.entries(state.byId)) byId[k] = serializePositionRecord(p);
 
   const data: SerializedPositionsCache = {
     byId,
-    ids: state.ids.map((id) => id as unknown as string),
+    ids: state.ids.map((pid: PositionId) => pid as unknown as string),
     lastUpdatedPulse: state.lastUpdatedPulse,
   };
 
-  const env = wrapEnvelope(data as unknown as never, CACHE_ENVELOPE_VERSION);
+  const env = wrapEnvelope(data as unknown as never, CACHE_VERSION);
   saveToStorage(SM_POSITIONS_KEY, env, storage);
 };
 
-/** ------------------------------
- * Store
- * ------------------------------ */
+/** ------------------------------ Store ------------------------------ */
 
 export type PositionStoreStatus = "idle" | "loading" | "ready" | "error";
 
@@ -432,40 +428,28 @@ export type OpenPositionInput = Readonly<{
 
 export type SigilMarketsPositionActions = Readonly<{
   hydrateFromCache: () => void;
-
-  /** Add a new position (open). If exists, it is replaced (idempotent). */
   openPosition: (input: OpenPositionInput) => PositionRecord;
-
-  /** Upsert positions (bulk). */
   upsertPositions: (positions: readonly PositionRecord[], opts?: Readonly<{ lastUpdatedPulse?: KaiPulse }>) => void;
-
-  /** Attach/update a minted Position Sigil artifact. */
   attachSigil: (positionId: PositionId, sigil: PositionSigilArtifact, updatedPulse: KaiPulse) => PersistResult<PositionRecord>;
-
-  /** Apply a market resolution to all open positions in that market. */
   applyMarketResolution: (req: Readonly<{
     marketId: MarketId;
     outcome: MarketOutcome;
     resolvedPulse: KaiPulse;
     evidenceHashes?: readonly EvidenceHash[];
   }>) => Readonly<{ updated: number; positions: readonly PositionRecord[] }>;
-
-  /** Mark a single position as settled (claimed/refunded). */
   applySettlement: (req: Readonly<{
     positionId: PositionId;
     settledPulse: KaiPulse;
     creditedMicro: PhiMicro;
     debitedMicro: PhiMicro;
-    nextStatus: PositionStatus; // "claimed" | "refunded"
+    nextStatus: PositionStatus;
     note?: string;
   }>) => PersistResult<PositionRecord>;
-
   removePosition: (positionId: PositionId) => void;
 
   clearAll: () => void;
   clearCache: () => void;
   persistNow: () => void;
-
   setStatus: (status: PositionStoreStatus, error?: string) => void;
 }>;
 
@@ -506,24 +490,29 @@ export const SigilMarketsPositionProvider = (props: Readonly<{ children: React.R
     });
   };
 
-  // Cross-tab sync
   useEffect(() => {
     if (!storage || typeof window === "undefined") return;
 
     const onStorage = (e: StorageEvent): void => {
       if (e.key !== SM_POSITIONS_KEY) return;
       if (e.newValue === null) return;
+
       try {
         const parsed = JSON.parse(e.newValue) as unknown;
-        const env = decodeEnvelope(parsed, CACHE_ENVELOPE_VERSION, decodeSerializedCache);
+        const env = decodeEnvelope(parsed, CACHE_VERSION, decodeSerializedCache);
         if (!env.ok) return;
 
         const byId: Record<string, PositionRecord> = {};
-        for (const [id, sv] of Object.entries(env.value.data.byId)) {
+        const entries = Object.entries(env.value.data.byId) as Array<[string, SerializedPositionRecord]>;
+        for (const [id, sv] of entries) {
           const dp = deserializePositionRecord(sv);
           if (dp.ok) byId[id] = dp.value;
         }
-        const idsFromCache = env.value.data.ids.filter((id) => byId[id] !== undefined).map((id) => asPositionId(id));
+
+        const idsFromCache = env.value.data.ids
+          .filter((id: string) => byId[id] !== undefined)
+          .map((id: string) => asPositionId(id));
+
         const ids = idsFromCache.length > 0 ? idsFromCache : sortPositionIds(byId);
 
         setState({
@@ -742,8 +731,8 @@ export const SigilMarketsPositionProvider = (props: Readonly<{ children: React.R
             status: req.nextStatus,
             settlement: {
               settledPulse: req.settledPulse,
-              creditedMicro: normalizePhi(req.creditedMicro),
-              debitedMicro: normalizePhi(req.debitedMicro),
+              creditedMicro: normalizePhi(req.creditedMicro as unknown as bigint),
+              debitedMicro: normalizePhi(req.debitedMicro as unknown as bigint),
               note: req.note,
             },
             updatedPulse: Math.max(p.updatedPulse, req.settledPulse),
@@ -777,7 +766,7 @@ export const SigilMarketsPositionProvider = (props: Readonly<{ children: React.R
           if (!prev.byId[key]) return prev;
           const byId: Record<string, PositionRecord> = { ...prev.byId };
           delete byId[key];
-          const ids = prev.ids.filter((id) => (id as unknown as string) !== key);
+          const ids = prev.ids.filter((pid: PositionId) => (pid as unknown as string) !== key);
           return { ...prev, byId, ids };
         },
         true,
@@ -833,7 +822,7 @@ export const useSigilMarketsPositionStore = (): SigilMarketsPositionStore => {
 export const usePositions = (): readonly PositionRecord[] => {
   const { state } = useSigilMarketsPositionStore();
   return state.ids
-    .map((id) => state.byId[id as unknown as string])
+    .map((id: PositionId) => state.byId[id as unknown as string])
     .filter((p): p is PositionRecord => p !== undefined);
 };
 

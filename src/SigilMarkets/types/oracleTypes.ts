@@ -242,7 +242,7 @@ export type ResolutionSigilPayloadV1 = Readonly<{
     sig: string;
     atPulse: KaiPulse;
     weight?: number;
-  }>;
+  }>[];
 
   /**
    * Optional: binder identity (who minted the resolution sigil artifact).

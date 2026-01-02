@@ -42,10 +42,10 @@ const hasVibrate = (): boolean => {
   }
 };
 
-const vibrate = (pattern: number | readonly number[]): void => {
+// IMPORTANT: navigator.vibrate expects VibratePattern (number | number[]), NOT readonly arrays.
+const vibrate = (pattern: VibratePattern): void => {
   try {
     if (!hasVibrate()) return;
-    // Some platforms return boolean; ignore.
     navigator.vibrate(pattern);
   } catch {
     // no-op
@@ -92,12 +92,13 @@ export const useHaptics = (): UseHaptics => {
       if (!patternMs || patternMs.length === 0) return;
 
       // Clamp values to a sane range; browsers may ignore extreme values.
-      const safe = patternMs
+      // This produces a MUTABLE number[] (good for VibratePattern).
+      const safe: number[] = patternMs
         .map((n) => (Number.isFinite(n) ? Math.max(1, Math.min(250, Math.floor(n))) : 0))
         .filter((n) => n > 0);
 
       if (safe.length === 0) return;
-      vibrate(safe);
+      vibrate(safe); // ✅ safe is number[] (mutable), matches VibratePattern
     },
     [enabled, supported],
   );

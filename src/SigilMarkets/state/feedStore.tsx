@@ -1,4 +1,4 @@
-// SigilMarkets/state/feedStore.ts
+// SigilMarkets/state/feedStore.tsx
 "use client";
 
 /* eslint-disable @typescript-eslint/consistent-type-definitions */
@@ -12,11 +12,20 @@
  * - Offline-first persistence (localStorage) with salvage + caps
  *
  * Notes:
- * - "Prophecies" are NOT wagers. They are proof-of-forecast objects.
- * - Wagers produce Positions (positionStore).
+ * - Prophecies are NOT wagers; they are proof-of-forecast objects.
+ * - Wagers create Positions (positionStore).
  */
 
-import React, { createContext, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+
 import {
   SM_FEED_KEY,
   decodeEnvelope,
@@ -42,8 +51,6 @@ import type {
   PhiMicro,
   PriceMicro,
   ShareMicro,
-  LockId,
-  VaultId,
 } from "../types/marketTypes";
 
 import { asLockId, asMarketId, asVaultId } from "../types/marketTypes";
@@ -54,12 +61,13 @@ import { asPositionId } from "../types/sigilPositionTypes";
 import type { KaiSignature, SvgHash, UserPhiKey } from "../types/vaultTypes";
 import { asKaiSignature, asSvgHash, asUserPhiKey } from "../types/vaultTypes";
 
+/* ----------------------------- helpers ----------------------------- */
+
 type UnknownRecord = Record<string, unknown>;
 const isRecord = (v: unknown): v is UnknownRecord => typeof v === "object" && v !== null;
 const isString = (v: unknown): v is string => typeof v === "string";
 const isNumber = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
-const isBoolean = (v: unknown): v is boolean => typeof v === "boolean";
-const isArray = (v: unknown): v is unknown[] => Array.isArray(v);
+const isArray = (v: unknown): v is readonly unknown[] => Array.isArray(v);
 
 const clampInt = (n: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, Math.floor(n)));
 
@@ -70,14 +78,15 @@ const nowMs = (): number => {
 
 const genId = (prefix: string): string => `${prefix}_${nowMs()}_${Math.random().toString(16).slice(2)}`;
 
-/** ---- Prophecy types (exported) ---- */
+const marketKey = (id: MarketId): string => id as unknown as string;
+
+/* ------------------------- exported prophecy types ------------------------- */
 
 export type ProphecyId = Brand<string, "ProphecyId">;
 export const asProphecyId = (v: string): ProphecyId => v as ProphecyId;
 
 export type ProphecyVisibility = "public" | "private";
 export type ProphecyKind = "sealed-prediction";
-
 export type ProphecyStatus = "sealed" | "fulfilled" | "missed" | "void";
 
 export type ProphecyAuthor = Readonly<{
@@ -85,10 +94,6 @@ export type ProphecyAuthor = Readonly<{
   kaiSignature: KaiSignature;
 }>;
 
-/**
- * Optional portable artifact for a prophecy (Sigil).
- * This is not required for the feed to work, but enables export/print/share.
- */
 export type ProphecySigilPayloadV1 = Readonly<{
   v: "SM-PROP-1";
   kind: "prophecy";
@@ -105,10 +110,8 @@ export type ProphecySigilPayloadV1 = Readonly<{
   visibility: ProphecyVisibility;
   note?: string;
 
-  /** Optional link to a staked position. */
   positionId?: PositionId;
 
-  /** Optional outcome snapshot if minted after resolution. */
   resolution?: Readonly<{
     outcome: MarketOutcome;
     resolvedPulse: KaiPulse;
@@ -135,13 +138,10 @@ export type ProphecyRecord = Readonly<{
   visibility: ProphecyVisibility;
   note?: string;
 
-  /** Optional linkage to a wager position. */
   positionId?: PositionId;
 
-  /** Optional sigil artifact ref. */
   sigil?: ProphecySigilArtifact;
 
-  /** Resolution snapshot applied by the store (derived from market resolution). */
   resolution?: Readonly<{
     outcome: MarketOutcome;
     resolvedPulse: KaiPulse;
@@ -152,19 +152,18 @@ export type ProphecyRecord = Readonly<{
   updatedPulse: KaiPulse;
 }>;
 
-/** ---- Market activity storage (capped) ---- */
+/* ------------------------- activity store ------------------------- */
 
 export type MarketActivityStore = Readonly<Record<string, readonly MarketActivityEvent[]>>;
 
 const DEFAULT_ACTIVITY_CAP_PER_MARKET = 240;
 const DEFAULT_GLOBAL_ACTIVITY_CAP = 420;
 
-/** Derive a stable key to dedupe activity events best-effort. */
 const activityKey = (e: MarketActivityEvent): string => {
   if (e.type === "trade") {
-    const vid = e.vaultId ?? "";
-    const lid = e.lockId ?? "";
-    return `trade:${e.marketId}:${e.side}:${e.atPulse}:${vid}:${lid}:${e.stakeMicro.toString(10)}:${e.sharesMicro.toString(10)}`;
+    const vid = e.vaultId ? (e.vaultId as unknown as string) : "";
+    const lid = e.lockId ? (e.lockId as unknown as string) : "";
+    return `trade:${e.marketId}:${e.side}:${e.atPulse}:${vid}:${lid}:${(e.stakeMicro as unknown as bigint).toString(10)}:${(e.sharesMicro as unknown as bigint).toString(10)}`;
   }
   if (e.type === "market-created") return `created:${e.marketId}:${e.atPulse}`;
   if (e.type === "market-closed") return `closed:${e.marketId}:${e.atPulse}`;
@@ -172,7 +171,7 @@ const activityKey = (e: MarketActivityEvent): string => {
   return `resolved:${e.marketId}:${e.outcome}:${e.atPulse}`;
 };
 
-/** ---- Persistence shapes ---- */
+/* ------------------------- persistence shapes ------------------------- */
 
 type SerializedProphecy = Readonly<{
   id: string;
@@ -206,7 +205,7 @@ type SerializedProphecy = Readonly<{
   updatedPulse: KaiPulse;
 }>;
 
-type SerializedActivityEvent = unknown; // stored as raw JSON; decoded loosely
+type SerializedActivityEvent = unknown;
 
 type SerializedFeedCache = Readonly<{
   propheciesById: Readonly<Record<string, SerializedProphecy>>;
@@ -217,6 +216,8 @@ type SerializedFeedCache = Readonly<{
 }>;
 
 const CACHE_ENVELOPE_VERSION = 1;
+
+/* ------------------------- decoding helpers ------------------------- */
 
 const decodeKaiMoment = (v: unknown): PersistResult<KaiMoment> => {
   if (!isRecord(v)) return { ok: false, error: "moment: not object" };
@@ -237,30 +238,30 @@ const decodeKaiMoment = (v: unknown): PersistResult<KaiMoment> => {
 const decodeProphecy: Decoder<ProphecyRecord> = (v: unknown) => {
   if (!isRecord(v)) return { ok: false, error: "prophecy: not object" };
 
-  const id = v["id"];
+  const idRaw = v["id"];
   const kind = v["kind"];
-  const marketId = v["marketId"];
+  const marketIdRaw = v["marketId"];
   const side = v["side"];
-  const createdAt = v["createdAt"];
-  const author = v["author"];
+  const createdAtRaw = v["createdAt"];
+  const authorRaw = v["author"];
   const visibility = v["visibility"];
-  const updatedPulse = v["updatedPulse"];
+  const updatedPulseRaw = v["updatedPulse"];
 
-  if (!isString(id) || id.length === 0) return { ok: false, error: "prophecy.id: bad" };
+  if (!isString(idRaw) || idRaw.length === 0) return { ok: false, error: "prophecy.id: bad" };
   if (kind !== "sealed-prediction") return { ok: false, error: "prophecy.kind: bad" };
-  if (!isString(marketId) || marketId.length === 0) return { ok: false, error: "prophecy.marketId: bad" };
+  if (!isString(marketIdRaw) || marketIdRaw.length === 0) return { ok: false, error: "prophecy.marketId: bad" };
   if (side !== "YES" && side !== "NO") return { ok: false, error: "prophecy.side: bad" };
-  if (!isRecord(author)) return { ok: false, error: "prophecy.author: bad" };
+  if (!isRecord(authorRaw)) return { ok: false, error: "prophecy.author: bad" };
   if (visibility !== "public" && visibility !== "private") return { ok: false, error: "prophecy.visibility: bad" };
-  if (!isNumber(updatedPulse)) return { ok: false, error: "prophecy.updatedPulse: bad" };
+  if (!isNumber(updatedPulseRaw)) return { ok: false, error: "prophecy.updatedPulse: bad" };
 
-  const momentRes = decodeKaiMoment(createdAt);
+  const momentRes = decodeKaiMoment(createdAtRaw);
   if (!momentRes.ok) return { ok: false, error: momentRes.error };
 
-  const userPhiKey = author["userPhiKey"];
-  const kaiSignature = author["kaiSignature"];
-  if (!isString(userPhiKey) || userPhiKey.length === 0) return { ok: false, error: "prophecy.author.userPhiKey: bad" };
-  if (!isString(kaiSignature) || kaiSignature.length === 0) return { ok: false, error: "prophecy.author.kaiSignature: bad" };
+  const userPhiKeyRaw = authorRaw["userPhiKey"];
+  const kaiSigRaw = authorRaw["kaiSignature"];
+  if (!isString(userPhiKeyRaw) || userPhiKeyRaw.length === 0) return { ok: false, error: "author.userPhiKey: bad" };
+  if (!isString(kaiSigRaw) || kaiSigRaw.length === 0) return { ok: false, error: "author.kaiSignature: bad" };
 
   const note = isString(v["note"]) ? v["note"] : undefined;
   const positionId = isString(v["positionId"]) && v["positionId"].length > 0 ? asPositionId(v["positionId"]) : undefined;
@@ -277,10 +278,13 @@ const decodeProphecy: Decoder<ProphecyRecord> = (v: unknown) => {
 
   const resolutionRaw = v["resolution"];
   const resolution =
-    isRecord(resolutionRaw) && (resolutionRaw["outcome"] === "YES" || resolutionRaw["outcome"] === "NO" || resolutionRaw["outcome"] === "VOID")
+    isRecord(resolutionRaw) &&
+    (resolutionRaw["outcome"] === "YES" || resolutionRaw["outcome"] === "NO" || resolutionRaw["outcome"] === "VOID")
       ? {
           outcome: resolutionRaw["outcome"] as MarketOutcome,
-          resolvedPulse: isNumber(resolutionRaw["resolvedPulse"]) ? Math.max(0, Math.floor(resolutionRaw["resolvedPulse"])) : momentRes.value.pulse,
+          resolvedPulse: isNumber(resolutionRaw["resolvedPulse"])
+            ? Math.max(0, Math.floor(resolutionRaw["resolvedPulse"]))
+            : momentRes.value.pulse,
           status:
             resolutionRaw["status"] === "fulfilled" || resolutionRaw["status"] === "missed" || resolutionRaw["status"] === "void"
               ? (resolutionRaw["status"] as ProphecyStatus)
@@ -294,12 +298,12 @@ const decodeProphecy: Decoder<ProphecyRecord> = (v: unknown) => {
   return {
     ok: true,
     value: {
-      id: asProphecyId(id),
+      id: asProphecyId(idRaw),
       kind: "sealed-prediction",
-      marketId: asMarketId(marketId),
+      marketId: asMarketId(marketIdRaw),
       side,
       createdAt: momentRes.value,
-      author: { userPhiKey: asUserPhiKey(userPhiKey), kaiSignature: asKaiSignature(kaiSignature) },
+      author: { userPhiKey: asUserPhiKey(userPhiKeyRaw), kaiSignature: asKaiSignature(kaiSigRaw) },
       visibility,
       note,
       positionId,
@@ -312,7 +316,7 @@ const decodeProphecy: Decoder<ProphecyRecord> = (v: unknown) => {
             evidenceHashes: resolution.evidenceHashes ? (resolution.evidenceHashes as unknown as EvidenceHash[]) : undefined,
           }
         : undefined,
-      updatedPulse: Math.max(0, Math.floor(updatedPulse)),
+      updatedPulse: Math.max(0, Math.floor(updatedPulseRaw)),
     },
   };
 };
@@ -348,13 +352,68 @@ const decodeSerializedFeedCache: Decoder<SerializedFeedCache> = (v: unknown) => 
   const globalActivity = globalActivityRaw as readonly SerializedActivityEvent[];
   const lastUpdatedPulse = isNumber(v["lastUpdatedPulse"]) ? Math.max(0, Math.floor(v["lastUpdatedPulse"])) : undefined;
 
-  return {
-    ok: true,
-    value: { propheciesById, prophecyIds, activityByMarketId, globalActivity, lastUpdatedPulse },
-  };
+  return { ok: true, value: { propheciesById, prophecyIds, activityByMarketId, globalActivity, lastUpdatedPulse } };
 };
 
-/** ---- In-memory state ---- */
+const decodeActivityEvent = (v: unknown): MarketActivityEvent | null => {
+  if (!isRecord(v)) return null;
+
+  const type = v["type"];
+  const marketIdRaw = v["marketId"];
+  const atPulseRaw = v["atPulse"];
+
+  if (!isString(type) || !isString(marketIdRaw) || !isNumber(atPulseRaw)) return null;
+
+  const marketId = asMarketId(marketIdRaw);
+  const atPulse = Math.max(0, Math.floor(atPulseRaw));
+
+  if (type === "market-created") return { type, marketId, atPulse };
+  if (type === "market-closed") return { type, marketId, atPulse };
+
+  if (type === "resolution-proposed" || type === "market-resolved") {
+    const outcome = v["outcome"];
+    if (outcome !== "YES" && outcome !== "NO" && outcome !== "VOID") return null;
+    return { type, marketId, outcome, atPulse };
+  }
+
+  if (type === "trade") {
+    const side = v["side"];
+    if (side !== "YES" && side !== "NO") return null;
+
+    const stakeMicroRaw = v["stakeMicro"];
+    const sharesMicroRaw = v["sharesMicro"];
+    const avgPriceMicroRaw = v["avgPriceMicro"];
+
+    if (!isString(stakeMicroRaw) || !isString(sharesMicroRaw) || !isString(avgPriceMicroRaw)) return null;
+
+    try {
+      const stake = BigInt(stakeMicroRaw);
+      const shares = BigInt(sharesMicroRaw);
+      const avg = BigInt(avgPriceMicroRaw);
+
+      const vaultId = isString(v["vaultId"]) ? asVaultId(v["vaultId"]) : undefined;
+      const lockId = isString(v["lockId"]) ? asLockId(v["lockId"]) : undefined;
+
+      return {
+        type,
+        marketId,
+        side,
+        stakeMicro: stake as unknown as PhiMicro,
+        sharesMicro: shares as unknown as ShareMicro,
+        avgPriceMicro: avg as unknown as PriceMicro,
+        atPulse,
+        vaultId,
+        lockId,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+};
+
+/* ------------------------- store state ------------------------- */
 
 export type FeedStoreStatus = "idle" | "loading" | "ready" | "error";
 
@@ -385,13 +444,8 @@ const defaultFeedState = (): SigilMarketsFeedState => ({
 
 const sortProphecyIds = (byId: Readonly<Record<string, ProphecyRecord>>): ProphecyId[] => {
   const arr: Array<{ id: string; p: number }> = [];
-  for (const [id, pr] of Object.entries(byId)) {
-    arr.push({ id, p: pr.updatedPulse ?? 0 });
-  }
-  arr.sort((a, b) => {
-    if (b.p !== a.p) return b.p - a.p;
-    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
-  });
+  for (const [id, pr] of Object.entries(byId)) arr.push({ id, p: pr.updatedPulse ?? 0 });
+  arr.sort((a, b) => (b.p !== a.p ? b.p - a.p : a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   return arr.map((x) => asProphecyId(x.id));
 };
 
@@ -405,13 +459,7 @@ const serializeProphecy = (p: ProphecyRecord): SerializedProphecy => ({
   visibility: p.visibility,
   note: p.note,
   positionId: p.positionId ? (p.positionId as unknown as string) : undefined,
-  sigil: p.sigil
-    ? {
-        svgHash: p.sigil.svgHash as unknown as string,
-        url: p.sigil.url,
-        payload: p.sigil.payload,
-      }
-    : undefined,
+  sigil: p.sigil ? { svgHash: p.sigil.svgHash as unknown as string, url: p.sigil.url, payload: p.sigil.payload } : undefined,
   resolution: p.resolution
     ? {
         outcome: p.resolution.outcome,
@@ -427,9 +475,7 @@ const persistCache = (storage: StorageLike | null, state: SigilMarketsFeedState)
   if (!storage) return;
 
   const propheciesById: Record<string, SerializedProphecy> = {};
-  for (const [id, p] of Object.entries(state.propheciesById)) {
-    propheciesById[id] = serializeProphecy(p);
-  }
+  for (const [k, p] of Object.entries(state.propheciesById)) propheciesById[k] = serializeProphecy(p);
 
   const activityByMarketId: Record<string, readonly SerializedActivityEvent[]> = {};
   for (const [mid, events] of Object.entries(state.activityByMarketId)) {
@@ -438,7 +484,7 @@ const persistCache = (storage: StorageLike | null, state: SigilMarketsFeedState)
 
   const data: SerializedFeedCache = {
     propheciesById,
-    prophecyIds: state.prophecyIds.map((id) => id as unknown as string),
+    prophecyIds: state.prophecyIds.map((pid: ProphecyId) => pid as unknown as string),
     activityByMarketId,
     globalActivity: state.globalActivity as unknown as readonly SerializedActivityEvent[],
     lastUpdatedPulse: state.lastUpdatedPulse,
@@ -457,76 +503,24 @@ const loadCache = (storage: StorageLike | null): PersistResult<Readonly<{ state:
   if (!res.ok) return { ok: false, error: res.error };
   if (res.value === null) return { ok: true, value: { state: defaultFeedState() } };
 
-  const env = res.value;
-  const cache = env.data;
+  const env = res.value; // <- typed
+  const cache = env.data; // <- typed as SerializedFeedCache (NOT JsonValue)
 
   const propheciesById: Record<string, ProphecyRecord> = {};
-  for (const [id, sv] of Object.entries(cache.propheciesById)) {
+  for (const [k, sv] of Object.entries(cache.propheciesById)) {
     const dp = decodeProphecy(sv);
-    if (dp.ok) propheciesById[id] = dp.value;
+    if (dp.ok) propheciesById[k] = dp.value;
   }
 
-  const prophecyIdsFromCache = cache.prophecyIds.filter((id) => propheciesById[id] !== undefined).map((id) => asProphecyId(id));
+  const prophecyIdsFromCache = cache.prophecyIds
+    .filter((id: string) => propheciesById[id] !== undefined)
+    .map((id: string) => asProphecyId(id));
+
   const prophecyIds = prophecyIdsFromCache.length > 0 ? prophecyIdsFromCache : sortProphecyIds(propheciesById);
 
-  // Activity is decoded loosely (best-effort); if malformed, drop.
-  const decodeActivityEvent = (v: unknown): MarketActivityEvent | null => {
-    if (!isRecord(v)) return null;
-    const type = v["type"];
-    const marketId = v["marketId"];
-    const atPulse = v["atPulse"];
-    if (!isString(type) || !isString(marketId) || !isNumber(atPulse)) return null;
-    const p = Math.max(0, Math.floor(atPulse));
-
-    if (type === "market-created") return { type, marketId: asMarketId(marketId), atPulse: p };
-    if (type === "market-closed") return { type, marketId: asMarketId(marketId), atPulse: p };
-    if (type === "resolution-proposed") {
-      const outcome = v["outcome"];
-      if (outcome !== "YES" && outcome !== "NO" && outcome !== "VOID") return null;
-      return { type, marketId: asMarketId(marketId), outcome, atPulse: p };
-    }
-    if (type === "market-resolved") {
-      const outcome = v["outcome"];
-      if (outcome !== "YES" && outcome !== "NO" && outcome !== "VOID") return null;
-      return { type, marketId: asMarketId(marketId), outcome, atPulse: p };
-    }
-    if (type === "trade") {
-      const side = v["side"];
-      if (side !== "YES" && side !== "NO") return null;
-      const stakeMicro = v["stakeMicro"];
-      const sharesMicro = v["sharesMicro"];
-      const avgPriceMicro = v["avgPriceMicro"];
-      if (typeof stakeMicro !== "string" || typeof sharesMicro !== "string" || typeof avgPriceMicro !== "string") return null;
-      // keep as bigint-like strings? In canonical types these are bigint.
-      // For feed UI we can rehydrate as BigInt safely.
-      try {
-        const stake = BigInt(stakeMicro);
-        const shares = BigInt(sharesMicro);
-        const avg = BigInt(avgPriceMicro);
-        const vaultId = isString(v["vaultId"]) ? asVaultId(v["vaultId"]) : undefined;
-        const lockId = isString(v["lockId"]) ? asLockId(v["lockId"]) : undefined;
-
-        return {
-          type,
-          marketId: asMarketId(marketId),
-          side,
-          stakeMicro: stake as PhiMicro,
-          sharesMicro: shares as ShareMicro,
-          avgPriceMicro: avg as PriceMicro,
-          atPulse: p,
-          vaultId: vaultId as VaultId | undefined,
-          lockId: lockId as LockId | undefined,
-        };
-      } catch {
-        return null;
-      }
-    }
-
-    return null;
-  };
-
   const activityByMarketId: Record<string, readonly MarketActivityEvent[]> = {};
-  for (const [mid, rawEvents] of Object.entries(cache.activityByMarketId)) {
+  for (const mid of Object.keys(cache.activityByMarketId)) {
+    const rawEvents = cache.activityByMarketId[mid];
     const events: MarketActivityEvent[] = [];
     for (const ev of rawEvents) {
       const d = decodeActivityEvent(ev);
@@ -558,7 +552,7 @@ const loadCache = (storage: StorageLike | null): PersistResult<Readonly<{ state:
   };
 };
 
-/** ---- Store actions ---- */
+/* ------------------------- actions ------------------------- */
 
 export type CreateProphecyInput = Readonly<{
   marketId: MarketId;
@@ -609,7 +603,7 @@ export type SigilMarketsFeedStore = Readonly<{
 
 const SigilMarketsFeedContext = createContext<SigilMarketsFeedStore | null>(null);
 
-export const SigilMarketsFeedProvider = (props: Readonly<{ children: React.ReactNode }>) => {
+export const SigilMarketsFeedProvider = (props: Readonly<{ children: ReactNode }>) => {
   const storage = useMemo(() => getDefaultStorage(), []);
   const [state, setState] = useState<SigilMarketsFeedState>(() => {
     const loaded = loadCache(storage);
@@ -620,9 +614,18 @@ export const SigilMarketsFeedProvider = (props: Readonly<{ children: React.React
   const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastPersistMsRef = useRef<number>(0);
 
+  // cleanup pending timers
+  useEffect(() => {
+    return () => {
+      if (persistTimer.current) clearTimeout(persistTimer.current);
+      persistTimer.current = null;
+    };
+  }, []);
+
   const schedulePersist = (next: SigilMarketsFeedState): void => {
     if (!storage) return;
     if (persistTimer.current) clearTimeout(persistTimer.current);
+
     persistTimer.current = setTimeout(() => {
       const t = nowMs();
       if (t - lastPersistMsRef.current < 350) return;
@@ -639,24 +642,14 @@ export const SigilMarketsFeedProvider = (props: Readonly<{ children: React.React
     });
   };
 
-  // Cross-tab sync
   useEffect(() => {
     if (!storage || typeof window === "undefined") return;
 
     const onStorage = (e: StorageEvent): void => {
       if (e.key !== SM_FEED_KEY) return;
       if (e.newValue === null) return;
-      try {
-        const parsed = JSON.parse(e.newValue) as unknown;
-        const env = decodeEnvelope(parsed, CACHE_ENVELOPE_VERSION, decodeSerializedFeedCache);
-        if (!env.ok) return;
-
-        // Reuse loadCache logic by re-parsing via decoder pipeline
-        const loaded = loadCache(storage);
-        if (loaded.ok) setState(loaded.value.state);
-      } catch {
-        // ignore
-      }
+      const loaded = loadCache(storage);
+      if (loaded.ok) setState(loaded.value.state);
     };
 
     window.addEventListener("storage", onStorage);
@@ -696,6 +689,7 @@ export const SigilMarketsFeedProvider = (props: Readonly<{ children: React.React
         (prev) => {
           const byId: Record<string, ProphecyRecord> = { ...prev.propheciesById, [id as unknown as string]: rec };
           const prophecyIds = sortProphecyIds(byId);
+
           return {
             ...prev,
             propheciesById: byId,
@@ -726,6 +720,7 @@ export const SigilMarketsFeedProvider = (props: Readonly<{ children: React.React
           }
 
           const prophecyIds = sortProphecyIds(byId);
+
           return {
             ...prev,
             propheciesById: byId,
@@ -747,7 +742,7 @@ export const SigilMarketsFeedProvider = (props: Readonly<{ children: React.React
           if (!prev.propheciesById[key]) return prev;
           const byId: Record<string, ProphecyRecord> = { ...prev.propheciesById };
           delete byId[key];
-          const prophecyIds = prev.prophecyIds.filter((x) => (x as unknown as string) !== key);
+          const prophecyIds = prev.prophecyIds.filter((pid: ProphecyId) => (pid as unknown as string) !== key);
           return { ...prev, propheciesById: byId, prophecyIds };
         },
         true,
@@ -802,9 +797,9 @@ export const SigilMarketsFeedProvider = (props: Readonly<{ children: React.React
           let changed = false;
           const byId: Record<string, ProphecyRecord> = { ...prev.propheciesById };
 
-          for (const [id, p] of Object.entries(prev.propheciesById)) {
-            if ((p.marketId as unknown as string) !== (req.marketId as unknown as string)) continue;
-            if (p.resolution) continue; // already applied
+          for (const [k, p] of Object.entries(prev.propheciesById)) {
+            if (marketKey(p.marketId) !== marketKey(req.marketId)) continue;
+            if (p.resolution) continue;
 
             let status: ProphecyStatus = "sealed";
             if (req.outcome === "VOID") status = "void";
@@ -821,7 +816,7 @@ export const SigilMarketsFeedProvider = (props: Readonly<{ children: React.React
               updatedPulse: Math.max(p.updatedPulse, req.resolvedPulse),
             };
 
-            byId[id] = next;
+            byId[k] = next;
             updated.push(next);
             count += 1;
             changed = true;
@@ -852,8 +847,8 @@ export const SigilMarketsFeedProvider = (props: Readonly<{ children: React.React
       globalCap?: number;
       updatedPulse: KaiPulse;
     }>): Readonly<{ added: number }> => {
-      const capPerMarket = req.capPerMarket ?? DEFAULT_ACTIVITY_CAP_PER_MARKET;
-      const globalCap = req.globalCap ?? DEFAULT_GLOBAL_ACTIVITY_CAP;
+      const capPerMarket = clampInt(req.capPerMarket ?? DEFAULT_ACTIVITY_CAP_PER_MARKET, 20, 2000);
+      const globalCap = clampInt(req.globalCap ?? DEFAULT_GLOBAL_ACTIVITY_CAP, 20, 3000);
 
       let added = 0;
 
@@ -861,7 +856,7 @@ export const SigilMarketsFeedProvider = (props: Readonly<{ children: React.React
         (prev) => {
           if (req.events.length === 0) return prev;
 
-          const mid = req.marketId as unknown as string;
+          const mid = marketKey(req.marketId);
           const existing = prev.activityByMarketId[mid] ?? [];
           const seen = new Set<string>(existing.map(activityKey));
 
@@ -874,17 +869,14 @@ export const SigilMarketsFeedProvider = (props: Readonly<{ children: React.React
             added += 1;
           }
 
-          // sort by atPulse ascending (timeline), but keep stable within pulse
           appended.sort((a, b) => a.atPulse - b.atPulse);
-
-          const cappedPerMarket = appended.length > capPerMarket ? appended.slice(appended.length - capPerMarket) : appended;
+          const cappedPerMarketList = appended.length > capPerMarket ? appended.slice(appended.length - capPerMarket) : appended;
 
           const activityByMarketId: Record<string, readonly MarketActivityEvent[]> = {
             ...prev.activityByMarketId,
-            [mid]: cappedPerMarket,
+            [mid]: cappedPerMarketList,
           };
 
-          // global activity: append and cap (descending feel)
           const globalSeen = new Set<string>(prev.globalActivity.map(activityKey));
           const global: MarketActivityEvent[] = [...prev.globalActivity];
 
@@ -894,6 +886,7 @@ export const SigilMarketsFeedProvider = (props: Readonly<{ children: React.React
             globalSeen.add(k);
             global.push(e);
           }
+
           global.sort((a, b) => a.atPulse - b.atPulse);
           const cappedGlobal = global.length > globalCap ? global.slice(global.length - globalCap) : global;
 
@@ -953,7 +946,7 @@ export const SigilMarketsFeedProvider = (props: Readonly<{ children: React.React
 };
 
 export const useSigilMarketsFeedStore = (): SigilMarketsFeedStore => {
-  const ctx = React.useContext(SigilMarketsFeedContext);
+  const ctx = useContext(SigilMarketsFeedContext);
   if (!ctx) throw new Error("useSigilMarketsFeedStore must be used within <SigilMarketsFeedProvider>");
   return ctx;
 };
@@ -962,13 +955,13 @@ export const useSigilMarketsFeedStore = (): SigilMarketsFeedStore => {
 export const useProphecyFeed = (): readonly ProphecyRecord[] => {
   const { state } = useSigilMarketsFeedStore();
   return state.prophecyIds
-    .map((id) => state.propheciesById[id as unknown as string])
+    .map((id: ProphecyId) => state.propheciesById[id as unknown as string])
     .filter((p): p is ProphecyRecord => p !== undefined);
 };
 
 export const useMarketActivity = (marketId: MarketId): readonly MarketActivityEvent[] => {
   const { state } = useSigilMarketsFeedStore();
-  return state.activityByMarketId[marketId as unknown as string] ?? [];
+  return state.activityByMarketId[marketKey(marketId)] ?? [];
 };
 
 export const useGlobalActivity = (): readonly MarketActivityEvent[] => useSigilMarketsFeedStore().state.globalActivity;

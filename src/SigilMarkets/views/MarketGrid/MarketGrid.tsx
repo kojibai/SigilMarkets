@@ -1,13 +1,11 @@
 // SigilMarkets/views/MarketGrid/MarketGrid.tsx
 "use client";
 
-import React, { useMemo } from "react";
-import type { KaiMoment, MarketId } from "../../types/marketTypes";
+import { useMemo, type RefObject } from "react";
+import type { KaiMoment } from "../../types/marketTypes";
 import { useMarketGrid } from "../../hooks/useMarketGrid";
 import { useSigilMarketsUi } from "../../state/uiStore";
 import { useScrollRestoration } from "../../hooks/useScrollRestoration";
-import { useHaptics } from "../../hooks/useHaptics";
-import { useSfx } from "../../hooks/useSfx";
 
 import { TopBar } from "../../ui/chrome/TopBar";
 import { MarketCell } from "./MarketCell";
@@ -18,13 +16,11 @@ import { MarketGridSkeleton } from "./MarketGridSkeleton";
 export type MarketGridProps = Readonly<{
   now: KaiMoment;
   scrollMode: "window" | "container";
-  scrollRef: React.RefObject<HTMLDivElement | null> | null;
+  scrollRef: RefObject<HTMLDivElement | null> | null;
 }>;
 
 export const MarketGrid = (props: MarketGridProps) => {
-  const { state: ui, actions } = useSigilMarketsUi();
-  const haptics = useHaptics();
-  const sfx = useSfx();
+  const { state: ui } = useSigilMarketsUi();
 
   const grid = useMarketGrid(props.now.pulse);
 
@@ -33,12 +29,6 @@ export const MarketGrid = (props: MarketGridProps) => {
     containerRef: props.scrollRef ?? undefined,
     restoreDelayMs: 0,
   });
-
-  const onSelectMarket = (marketId: MarketId): void => {
-    haptics.fire("tap");
-    sfx.play("tap");
-    actions.navigate({ view: "market", marketId });
-  };
 
   const subtitle = useMemo(() => {
     const f = grid.filteredCount;
@@ -71,11 +61,7 @@ export const MarketGrid = (props: MarketGridProps) => {
       ) : (
         <div className={`sm-grid ${grid.prefs.layout === "list" ? "is-list" : "is-honeycomb"}`}>
           {grid.items.map((it) => (
-            <MarketCell
-              key={it.marketId as unknown as string}
-              item={it}
-              onOpen={() => onSelectMarket(it.marketId)}
-            />
+            <MarketCell key={it.marketId as unknown as string} {...it} />
           ))}
         </div>
       )}

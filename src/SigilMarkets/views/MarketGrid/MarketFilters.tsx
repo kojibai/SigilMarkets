@@ -1,9 +1,9 @@
 // SigilMarkets/views/MarketGrid/MarketFilters.tsx
 "use client";
 
-import React, { useMemo } from "react";
-import type { KaiMoment, MarketCategory } from "../../types/marketTypes";
+import type { KaiMoment, MarketCategory, MarketId } from "../../types/marketTypes";
 import { useSigilMarketsUi } from "../../state/uiStore";
+import { useMarketGrid } from "../../hooks/useMarketGrid";
 import { Chip } from "../../ui/atoms/Chip";
 import { Icon } from "../../ui/atoms/Icon";
 
@@ -13,8 +13,11 @@ export type MarketFiltersProps = Readonly<{
 
 const CATS: readonly MarketCategory[] = ["weather", "sports", "finance", "crypto", "tech", "world", "culture", "other"];
 
-export const MarketFilters = (_props: MarketFiltersProps) => {
+export const MarketFilters = (props: MarketFiltersProps) => {
   const { state, actions } = useSigilMarketsUi();
+
+  // Use current grid view to pick a reasonable default market when sealing from grid.
+  const grid = useMarketGrid(props.now.pulse);
 
   const active = state.grid.filters.categories;
 
@@ -44,10 +47,24 @@ export const MarketFilters = (_props: MarketFiltersProps) => {
     return "default";
   };
 
+  const openSeal = (): void => {
+    // If grid has items, use the first as the default marketId to satisfy SheetPayload contract.
+    const first = grid.items.length > 0 ? grid.items[0] : null;
+
+    if (!first) {
+      // No markets available: send user to prophecy page (they can pick market there).
+      actions.navigate({ view: "prophecy" });
+      return;
+    }
+
+    const marketId: MarketId = first.marketId;
+    actions.pushSheet({ id: "seal-prediction", marketId });
+  };
+
   return (
     <div className="sm-grid-filters">
       <div className="sm-grid-filter-row">
-        <button type="button" className="sm-grid-search" onClick={() => actions.pushSheet({ id: "seal-prediction", marketId: undefined })}>
+        <button type="button" className="sm-grid-search" onClick={openSeal}>
           <span className="sm-grid-search-ico">
             <Icon name="spark" size={14} tone="gold" />
           </span>

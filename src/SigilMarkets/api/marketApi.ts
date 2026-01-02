@@ -32,7 +32,6 @@ import type {
   KaiPulse,
   Market,
   MarketCategory,
-  MarketId,
   MarketOraclePolicy,
   MarketRules,
   MarketSettlementPolicy,
@@ -44,7 +43,7 @@ import type {
   PhiMicro,
   PriceMicro,
   ShareMicro,
-  EvidenceHash,
+ MarketOutcome,
 } from "../types/marketTypes";
 
 import {
@@ -55,7 +54,6 @@ import {
   isMarketOutcome,
   isMarketStatus,
   ONE_PHI_MICRO,
-  type MarketOutcome,
 } from "../types/marketTypes";
 
 import { cachedJsonFetch, type DecodeResult } from "./cacheApi";
@@ -66,7 +64,7 @@ type UnknownRecord = Record<string, unknown>;
 const isRecord = (v: unknown): v is UnknownRecord => typeof v === "object" && v !== null;
 const isString = (v: unknown): v is string => typeof v === "string";
 const isNumber = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
-const isArray = (v: unknown): v is unknown[] => Array.isArray(v);
+const isArray = (v: unknown): v is readonly unknown[] => Array.isArray(v);
 
 const clampInt = (n: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, Math.floor(n)));
 
@@ -250,10 +248,12 @@ const decodeVenueState = (v: unknown): DecodeResult<MarketVenueState> => {
     if (!isRecord(amm)) return { ok: false, error: "amm: not object" };
     const curve = amm["curve"];
     if (curve !== "cpmm" && curve !== "lmsr") return { ok: false, error: "amm.curve: bad" };
+
     const yesInv = parseBigIntDec(amm["yesInventoryMicro"]);
     const noInv = parseBigIntDec(amm["noInventoryMicro"]);
     const feeBps = parseBps(amm["feeBps"]);
     if (yesInv === null || noInv === null || feeBps === null) return { ok: false, error: "amm: bad micros/fee" };
+
     const param = amm["paramMicro"] !== undefined ? parseBigIntDec(amm["paramMicro"]) : null;
 
     const out: AmmState = {
@@ -269,6 +269,7 @@ const decodeVenueState = (v: unknown): DecodeResult<MarketVenueState> => {
   if (venue === "parimutuel") {
     const pool = v["pool"];
     if (!isRecord(pool)) return { ok: false, error: "pool: not object" };
+
     const yesPool = parseBigIntDec(pool["yesPoolMicro"]);
     const noPool = parseBigIntDec(pool["noPoolMicro"]);
     const feeBps = parseBps(pool["feeBps"]);
@@ -296,8 +297,7 @@ const decodeVenueState = (v: unknown): DecodeResult<MarketVenueState> => {
     const parseDepth = (x: unknown): readonly ClobPriceLevel[] | undefined => {
       if (!isArray(x)) return undefined;
       const out: ClobPriceLevel[] = [];
-      for (let i = 0; i < x.length; i += 1) {
-        const item = x[i];
+      for (const item of x) {
         if (!isRecord(item)) continue;
         const price = parseBigIntDec(item["priceMicro"]);
         const size = parseBigIntDec(item["sizeMicro"]);
@@ -400,8 +400,9 @@ const decodeRules = (v: unknown): DecodeResult<MarketRules> => {
   if (!isString(yesCondition) || yesCondition.length === 0) return { ok: false, error: "rules.yesCondition: bad" };
 
   const clarificationsRaw = v["clarifications"];
-  const clarifications =
-    isArray(clarificationsRaw) ? clarificationsRaw.filter((x): x is string => isString(x) && x.length > 0) : undefined;
+  const clarifications = isArray(clarificationsRaw)
+    ? clarificationsRaw.filter((x): x is string => isString(x) && x.length > 0)
+    : undefined;
 
   const oracleRes = decodeOraclePolicy(v["oracle"]);
   if (!oracleRes.ok) return { ok: false, error: oracleRes.error };
@@ -450,9 +451,13 @@ const decodeResolution = (v: unknown): DecodeResult<BinaryMarketState["resolutio
   const evidence =
     isRecord(evidenceRaw)
       ? {
-          urls: isArray(evidenceRaw["urls"]) ? evidenceRaw["urls"].filter((x): x is string => isString(x) && x.length > 0) : undefined,
+          urls: isArray(evidenceRaw["urls"])
+            ? evidenceRaw["urls"].filter((x): x is string => isString(x) && x.length > 0)
+            : undefined,
           hashes: isArray(evidenceRaw["hashes"])
-            ? evidenceRaw["hashes"].filter((x): x is string => isString(x) && x.length > 0).map((h) => asEvidenceHash(h))
+            ? evidenceRaw["hashes"]
+                .filter((x): x is string => isString(x) && x.length > 0)
+                .map((h) => asEvidenceHash(h))
             : undefined,
           summary: isString(evidenceRaw["summary"]) ? evidenceRaw["summary"] : undefined,
         }
@@ -461,13 +466,23 @@ const decodeResolution = (v: unknown): DecodeResult<BinaryMarketState["resolutio
   const disputeRaw = v["dispute"];
   const dispute =
     isRecord(disputeRaw) && disputeRaw["proposedPulse"] !== undefined && disputeRaw["finalPulse"] !== undefined
-      ? {
-          proposedPulse: parsePulse(disputeRaw["proposedPulse"]) ?? resolvedPulse,
-          finalPulse: parsePulse(disputeRaw["finalPulse"]) ?? resolvedPulse,
-          meta: isRecord(disputeRaw["meta"])
-            ? Object.fromEntries(Object.entries(disputeRaw["meta"]).filter(([, vv]): vv is string => isString(vv)))
-            : undefined,
-        }
+      ? (() => {
+          const proposedPulse = parsePulse(disputeRaw["proposedPulse"]) ?? resolvedPulse;
+          const finalPulse = parsePulse(disputeRaw["finalPulse"]) ?? resolvedPulse;
+
+          const metaRaw = disputeRaw["meta"];
+          let meta: Readonly<Record<string, string>> | undefined;
+
+          if (isRecord(metaRaw)) {
+            const out: Record<string, string> = {};
+            for (const [k, val] of Object.entries(metaRaw)) {
+              if (isString(val)) out[k] = val;
+            }
+            meta = Object.keys(out).length > 0 ? out : undefined;
+          }
+
+          return { proposedPulse, finalPulse, meta };
+        })()
       : undefined;
 
   return {
@@ -519,7 +534,7 @@ const decodeBinaryMarket = (v: unknown): DecodeResult<BinaryMarket> => {
   const def: BinaryMarketDefinition = {
     id: asMarketId(id),
     kind: "binary",
-    slug: asMarketSlug(isString(defRaw["slug"]) ? defRaw["slug"] : slug),
+    slug: asMarketSlug(slug),
     question,
     description: isString(defRaw["description"]) ? defRaw["description"] : undefined,
     category: cat,
@@ -563,26 +578,29 @@ const decodeBinaryMarket = (v: unknown): DecodeResult<BinaryMarket> => {
   return { ok: true, value: { def, state } };
 };
 
-const decodeMarketListResponse = (v: unknown): DecodeResult<Readonly<{ markets: readonly Market[]; lastSyncedPulse?: KaiPulse }>> => {
-  const arr = isArray(v) ? v : null;
+const decodeMarketListResponse = (
+  v: unknown,
+): DecodeResult<Readonly<{ markets: readonly Market[]; lastSyncedPulse?: KaiPulse }>> => {
+  // Use the declared response union so it’s not dead code (and helps readability).
+  const raw = v as SerializedMarketListResponse;
 
-  if (arr) {
+  if (isArray(raw)) {
     const markets: Market[] = [];
-    for (const item of arr) {
+    for (const item of raw) {
       const dm = decodeBinaryMarket(item);
       if (dm.ok) markets.push(dm.value);
     }
     return { ok: true, value: { markets } };
   }
 
-  if (isRecord(v) && isArray(v["markets"])) {
-    const rawMarkets = v["markets"];
+  if (isRecord(raw) && isArray(raw["markets"])) {
+    const rawMarkets = raw["markets"];
     const markets: Market[] = [];
     for (const item of rawMarkets) {
       const dm = decodeBinaryMarket(item);
       if (dm.ok) markets.push(dm.value);
     }
-    const lastSyncedPulse = v["lastSyncedPulse"] !== undefined ? parsePulse(v["lastSyncedPulse"]) ?? undefined : undefined;
+    const lastSyncedPulse = raw["lastSyncedPulse"] !== undefined ? parsePulse(raw["lastSyncedPulse"]) ?? undefined : undefined;
     return { ok: true, value: { markets, lastSyncedPulse } };
   }
 
@@ -616,11 +634,11 @@ const joinUrl = (base: string, path: string): string => {
 
 const withQuery = (url: string, query?: Readonly<Record<string, string>>): string => {
   if (!query) return url;
-  const entries = Object.entries(query).filter(([k, v]) => k.length > 0 && v.length > 0);
+  const entries = Object.entries(query).filter(([k, val]) => k.length > 0 && val.length > 0);
   if (entries.length === 0) return url;
 
   const u = new URL(url, typeof window !== "undefined" ? window.location.origin : "http://localhost");
-  for (const [k, v] of entries) u.searchParams.set(k, v);
+  for (const [k, val] of entries) u.searchParams.set(k, val);
   return u.toString();
 };
 
@@ -674,7 +692,7 @@ export const fetchMarkets = async (cfg: SigilMarketsMarketApiConfig, nowPulse: K
 
 /** Default config (safe for both standalone and integrated apps). */
 export const defaultMarketApiConfig = (): SigilMarketsMarketApiConfig => {
-  // If you want a global override, set: window.__SIGIL_MARKETS_API_BASE__ = "https://…"
+  // Global override hook: window.__SIGIL_MARKETS_API_BASE__ = "https://…"
   const g = globalThis as unknown as UnknownRecord;
   const base = isString(g["__SIGIL_MARKETS_API_BASE__"]) ? (g["__SIGIL_MARKETS_API_BASE__"] as string) : undefined;
 

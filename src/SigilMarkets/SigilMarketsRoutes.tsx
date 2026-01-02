@@ -1,7 +1,7 @@
 // SigilMarkets/SigilMarketsRoutes.tsx
 "use client";
 
-import React, { useMemo } from "react";
+import { useMemo, type RefObject } from "react";
 import type { KaiMoment, MarketId } from "./types/marketTypes";
 import { useSigilMarketsUi } from "./state/uiStore";
 
@@ -17,51 +17,37 @@ import { SigilMarketsDock } from "./SigilMarketsDock";
 import { SigilShareSheet } from "./sigils/SigilShareSheet";
 import { useSigilMarketsPositionStore } from "./state/positionStore";
 
-// Sheet stack renderers (minimal, but makes the experience actually work)
+// Sheet stack renderers
 import { InhaleGlyphGate } from "./sigils/InhaleGlyphGate";
 import { SealPredictionSheet } from "./views/Prophecy/SealPredictionSheet";
 
 export type SigilMarketsRoutesProps = Readonly<{
   now: KaiMoment;
   scrollMode: "window" | "container";
-  scrollRef: React.RefObject<HTMLDivElement | null> | null;
+  scrollRef: RefObject<HTMLDivElement | null> | null;
 }>;
 
 const SheetsLayer = (props: Readonly<{ now: KaiMoment }>) => {
   const { state, actions } = useSigilMarketsUi();
   const { state: posState } = useSigilMarketsPositionStore();
-  const top = state.sheets.length > 0 ? state.sheets[state.sheets.length - 1].payload : null;
 
+  const top = state.sheets.length > 0 ? state.sheets[state.sheets.length - 1].payload : null;
   if (!top) return null;
 
   const close = (): void => actions.popSheet();
 
   if (top.id === "inhale-glyph") {
-    return (
-      <InhaleGlyphGate
-        open
-        onClose={close}
-        now={props.now}
-        reason={top.reason}
-        marketId={top.marketId}
-      />
-    );
+    return <InhaleGlyphGate open onClose={close} now={props.now} reason={top.reason} marketId={top.marketId} />;
   }
 
   if (top.id === "seal-prediction") {
-    return (
-      <SealPredictionSheet
-        open
-        onClose={close}
-        now={props.now}
-        initialMarketId={(top.marketId ?? null) as MarketId | null}
-      />
-    );
+    return <SealPredictionSheet open onClose={close} now={props.now} initialMarketId={top.marketId} />;
   }
 
   if (top.id === "share-sigil") {
     const refId = top.refId;
-    // MVP: support position share by positionId
+
+    // MVP: share a Position sigil by position id
     const pos = posState.byId[refId] ?? null;
     const svgUrl = pos?.sigil?.url;
 
@@ -72,13 +58,10 @@ const SheetsLayer = (props: Readonly<{ now: KaiMoment }>) => {
         title="Share sigil"
         filenameBase={`sigil-${refId}`}
         svgUrl={svgUrl}
-        svgText={pos?.sigil?.svg}
       />
     );
   }
 
-  // Other sheets are rendered locally for now (MarketRoom, Vault, Positions).
-  // We’ll centralize them here later once every sheet is fully wired.
   return null;
 };
 
@@ -92,51 +75,22 @@ export const SigilMarketsRoutes = (props: SigilMarketsRoutesProps) => {
         return <MarketGrid now={props.now} scrollMode={props.scrollMode} scrollRef={props.scrollRef} />;
 
       case "market":
-        return (
-          <MarketRoom
-            marketId={route.marketId}
-            now={props.now}
-            scrollMode={props.scrollMode}
-            scrollRef={props.scrollRef}
-          />
-        );
+        return <MarketRoom marketId={route.marketId} now={props.now} scrollMode={props.scrollMode} scrollRef={props.scrollRef} />;
 
       case "vault":
-        return (
-          <VaultPanel
-            vaultId={route.vaultId}
-            now={props.now}
-            scrollMode={props.scrollMode}
-            scrollRef={props.scrollRef}
-          />
-        );
+        return <VaultPanel vaultId={route.vaultId} now={props.now} scrollMode={props.scrollMode} scrollRef={props.scrollRef} />;
 
       case "positions":
         return <PositionsHome now={props.now} scrollMode={props.scrollMode} scrollRef={props.scrollRef} />;
 
       case "position":
-        return (
-          <PositionDetail
-            positionId={route.positionId}
-            now={props.now}
-            scrollMode={props.scrollMode}
-            scrollRef={props.scrollRef}
-          />
-        );
-        
+        return <PositionDetail positionId={route.positionId} now={props.now} scrollMode={props.scrollMode} scrollRef={props.scrollRef} />;
 
       case "prophecy":
         return <ProphecyFeed now={props.now} scrollMode={props.scrollMode} scrollRef={props.scrollRef} />;
 
       case "resolution":
-        return (
-          <ResolutionCenter
-            marketId={route.marketId}
-            now={props.now}
-            scrollMode={props.scrollMode}
-            scrollRef={props.scrollRef}
-          />
-        );
+        return <ResolutionCenter marketId={route.marketId} now={props.now} scrollMode={props.scrollMode} scrollRef={props.scrollRef} />;
 
       default: {
         // exhaustive

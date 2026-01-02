@@ -2423,3 +2423,63 @@
   line-height: 1.35;
   overflow: auto;
 }
+/* Add these styles to SigilMarkets/styles/sigilMarkets.css (optional) */
+
+.sm-export-pos{ display: grid; gap: 10px; }
+.sm-export-pos-row{ display: flex; justify-content: space-between; gap: 10px; font-size: 12px; }
+.sm-export-pos-row .k{ color: rgba(255,255,255,0.62); font-weight: 900; letter-spacing: 0.06em; }
+.sm-export-pos-row .v{ color: rgba(255,255,255,0.90); font-weight: 900; }
+.sm-export-pos-tags{ display: flex; gap: 8px; flex-wrap: wrap; }
+/* Add these styles to SigilMarkets/styles/sigilMarkets.css (optional, matches existing aesthetic) */
+
+.sm-transfer{ display: grid; gap: 10px; }
+.sm-transfer-row{ display: flex; justify-content: space-between; gap: 10px; font-size: 12px; }
+.sm-transfer-row .k{ color: rgba(255,255,255,0.62); font-weight: 900; letter-spacing: 0.06em; }
+.sm-transfer-row .v{ color: rgba(255,255,255,0.90); font-weight: 900; }
+.sm-transfer-modes{ display: flex; gap: 8px; flex-wrap: wrap; }
+.sm-transfer-warn{
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,219,138,0.22);
+  background: rgba(255,219,138,0.10);
+  color: rgba(255,255,255,0.86);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/* Add to SigilMarkets/styles/sigilMarkets.css */
+
+.sm-search{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.05);
+  padding: 10px 12px;
+}
+
+.sm-search-ico{
+  width: 28px;
+  height: 28px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(0,0,0,0.08);
+}
+
+.sm-search-in{
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: rgba(255,255,255,0.90);
+  font-size: 13px;
+}
+
+.sm-search-in::placeholder{
+  color: rgba(255,255,255,0.45);
+}

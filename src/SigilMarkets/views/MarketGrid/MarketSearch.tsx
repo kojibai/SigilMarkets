@@ -6,10 +6,11 @@ import { SearchBar } from "../../ui/chrome/SearchBar";
 
 export const MarketSearch = () => {
   const { state, actions } = useSigilMarketsUi();
+
   return (
     <SearchBar
       value={state.grid.filters.query}
-      onChange={(q) => actions.setGridQuery(q)}
+      onChange={(q: string) => actions.setGridQuery(q)}
       placeholder="Search markets…"
     />
   );
