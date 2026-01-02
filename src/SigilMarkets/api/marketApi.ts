@@ -32,7 +32,6 @@ import type {
   KaiPulse,
   Market,
   MarketCategory,
-  MarketId,
   MarketOraclePolicy,
   MarketRules,
   MarketSettlementPolicy,
@@ -44,7 +43,6 @@ import type {
   PhiMicro,
   PriceMicro,
   ShareMicro,
-  EvidenceHash,
 } from "../types/marketTypes";
 
 import {
@@ -67,6 +65,7 @@ const isRecord = (v: unknown): v is UnknownRecord => typeof v === "object" && v 
 const isString = (v: unknown): v is string => typeof v === "string";
 const isNumber = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const isArray = (v: unknown): v is unknown[] => Array.isArray(v);
+const isStringEntry = (entry: [string, unknown]): entry is [string, string] => isString(entry[1]);
 
 const clampInt = (n: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, Math.floor(n)));
 
@@ -224,10 +223,6 @@ type SerializedBinaryMarketDefinition = Readonly<{
 }>;
 
 type SerializedBinaryMarket = Readonly<{ def: SerializedBinaryMarketDefinition; state: SerializedBinaryMarketState }>;
-
-type SerializedMarketListResponse =
-  | readonly SerializedBinaryMarket[]
-  | Readonly<{ markets: readonly SerializedBinaryMarket[]; lastSyncedPulse?: KaiPulse }>;
 
 /** ---------------------------------------
  * Decoders
@@ -465,7 +460,7 @@ const decodeResolution = (v: unknown): DecodeResult<BinaryMarketState["resolutio
           proposedPulse: parsePulse(disputeRaw["proposedPulse"]) ?? resolvedPulse,
           finalPulse: parsePulse(disputeRaw["finalPulse"]) ?? resolvedPulse,
           meta: isRecord(disputeRaw["meta"])
-            ? Object.fromEntries(Object.entries(disputeRaw["meta"]).filter(([, vv]): vv is string => isString(vv)))
+            ? Object.fromEntries(Object.entries(disputeRaw["meta"]).filter(isStringEntry))
             : undefined,
         }
       : undefined;
