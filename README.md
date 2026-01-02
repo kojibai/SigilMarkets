@@ -140,7 +140,7 @@ This module lives at:
 
 src/components/SigilMarkets/
 
-```
+
 
 High level layout:
 
@@ -227,7 +227,6 @@ Sheet.tsx
 Tooltip.tsx
 Toast.tsx
 
-```
 motion/
   BreathGlow.tsx
   PulseSpark.tsx
@@ -242,7 +241,7 @@ chrome/
   SearchBar.tsx
   FilterRow.tsx
   Tabs.tsx
-```
+
 
 views/
 MarketGrid/
@@ -254,7 +253,7 @@ MarketSearch.tsx
 MarketGridEmpty.tsx
 MarketGridSkeleton.tsx
 
-```
+
 MarketRoom/
   MarketRoom.tsx
   MarketHeader.tsx
@@ -304,7 +303,7 @@ Resolution/
   OutcomeReveal.tsx
   DisputeSheet.tsx
   EvidenceViewer.tsx
-```
+
 
 sigils/
 InhaleGlyphGate.tsx
@@ -316,9 +315,7 @@ SigilShareSheet.tsx
 
 sounds/
 sfx.ts
-
-````
-
+```
 ---
 
 ## How the app flows
