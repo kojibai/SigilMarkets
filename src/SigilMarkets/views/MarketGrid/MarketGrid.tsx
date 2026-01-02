@@ -41,7 +41,7 @@ export const MarketGrid = (props: MarketGridProps) => {
   const showEmpty = grid.totalCount > 0 && grid.filteredCount === 0;
 
   return (
-    <div className="sm-page" data-sm="market-grid">
+    <div className="sm-page sm-honeycomb-page" data-sm="market-grid">
       <TopBar
         title="Sigil Markets"
         subtitle={subtitle}
