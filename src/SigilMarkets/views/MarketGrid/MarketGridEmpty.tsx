@@ -1,7 +1,5 @@
 // SigilMarkets/views/MarketGrid/MarketGridEmpty.tsx
 "use client";
-
-import React from "react";
 import { Card, CardContent } from "../../ui/atoms/Card";
 import { Button } from "../../ui/atoms/Button";
 import { useSigilMarketsUi } from "../../state/uiStore";

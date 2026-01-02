@@ -1,89 +1,174 @@
-// SigilMarkets/views/Prophecy/ProphecyCard.tsx
+// SigilMarkets/views/Prophecy/ProphecyFeed.tsx
 "use client";
 
-import React, { useMemo } from "react";
-import type { KaiMoment } from "../../types/marketTypes";
-import type { ProphecyRecord } from "../../state/feedStore";
+import { useMemo, useState } from "react";
+import type { KaiMoment, MarketId } from "../../types/marketTypes";
+import { useSigilMarketsUi } from "../../state/uiStore";
+import { useScrollRestoration } from "../../hooks/useScrollRestoration";
+import { useProphecyFeed } from "../../hooks/useProphecyFeed";
+import { useMarkets } from "../../state/marketStore";
+
+import { TopBar } from "../../ui/chrome/TopBar";
 import { Card, CardContent } from "../../ui/atoms/Card";
 import { Chip } from "../../ui/atoms/Chip";
 import { Icon } from "../../ui/atoms/Icon";
-import { shortKey } from "../../utils/format";
 
-export type ProphecyCardProps = Readonly<{
-  prophecy: ProphecyRecord;
+import { ProphecyCard } from "./ProphecyCard";
+import { SealPredictionSheet } from "./SealPredictionSheet";
+import { ProphecyLeaderboard } from "./ProphecyLeaderboard";
+
+export type ProphecyFeedProps = Readonly<{
   now: KaiMoment;
-  marketQuestion: string;
-  onOpenMarket: () => void;
-  onSealMore: () => void;
-  onRemove: () => void;
+  scrollMode: "window" | "container";
+  scrollRef: React.RefObject<HTMLDivElement | null> | null;
 }>;
 
-const toneForStatus = (s: string): "default" | "gold" | "danger" | "success" | "violet" => {
-  if (s === "sealed") return "gold";
-  if (s === "fulfilled") return "success";
-  if (s === "missed") return "danger";
-  if (s === "void") return "violet";
-  return "default";
-};
+type ViewMode = "feed" | "leaderboard";
 
-export const ProphecyCard = (props: ProphecyCardProps) => {
-  const p = props.prophecy;
-  const status = p.resolution?.status ?? "sealed";
+export const ProphecyFeed = (props: ProphecyFeedProps) => {
+  const { state: uiState, actions: ui } = useSigilMarketsUi();
 
-  const author = useMemo(() => shortKey(p.author.userPhiKey as unknown as string), [p.author.userPhiKey]);
+  useScrollRestoration(uiState.route, {
+    mode: props.scrollMode,
+    containerRef: props.scrollRef ?? undefined,
+    restoreDelayMs: 0,
+  });
 
-  const outcomeText = useMemo(() => {
-    if (!p.resolution) return "pending";
-    return `${p.resolution.outcome} • p${p.resolution.resolvedPulse}`;
-  }, [p.resolution]);
+  const markets = useMarkets();
+  const questionById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const x of markets) {
+      m.set(x.def.id as unknown as string, x.def.question);
+    }
+    return m;
+  }, [markets]);
+
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [sheetMarketId, setSheetMarketId] = useState<MarketId | null>(null);
+
+  const [mode, setMode] = useState<ViewMode>("feed");
+
+  const { prophecies, counts, leaderboard, activeVault, actions } = useProphecyFeed({
+    visibility: "all",
+    includeResolved: true,
+  });
+
+  const subtitle = useMemo(() => {
+    const parts: string[] = [];
+    parts.push(`${counts.total} total`);
+    if (counts.sealed > 0) parts.push(`${counts.sealed} sealed`);
+    if (counts.fulfilled > 0) parts.push(`${counts.fulfilled} fulfilled`);
+    if (counts.missed > 0) parts.push(`${counts.missed} missed`);
+    return parts.join(" • ");
+  }, [counts.fulfilled, counts.missed, counts.sealed, counts.total]);
 
   return (
-    <div className="sm-proph-item">
-      <button type="button" className="sm-proph-btn" onClick={props.onOpenMarket} aria-label="Open market">
-        <Card variant="glass2" className={`sm-proph-card ${status === "fulfilled" ? "sm-win-pop" : status === "missed" ? "sm-loss-fade" : ""}`}>
-          <CardContent compact>
-            <div className="sm-proph-top">
-              <div className="sm-proph-q">{props.marketQuestion}</div>
-              <Chip size="sm" selected={false} variant="outline" tone={toneForStatus(status)}>
-                {status}
+    <div className="sm-page" data-sm="prophecy">
+      <TopBar title="Prophecy" subtitle={subtitle} now={props.now} scrollMode={props.scrollMode} scrollRef={props.scrollRef} />
+
+      <div className="sm-proph-toolbar">
+        <div className="sm-proph-left">
+          <Chip
+            size="sm"
+            selected={mode === "feed"}
+            onClick={() => setMode("feed")}
+            left={<Icon name="spark" size={14} tone="gold" />}
+          >
+            Feed
+          </Chip>
+
+          <Chip
+            size="sm"
+            selected={mode === "leaderboard"}
+            onClick={() => setMode("leaderboard")}
+            left={<Icon name="positions" size={14} tone="dim" />}
+          >
+            Leaderboard
+          </Chip>
+        </div>
+
+        <div className="sm-proph-right">
+          <Chip
+            size="sm"
+            selected={false}
+            tone="gold"
+            onClick={() => {
+              setSheetMarketId(null);
+              setSheetOpen(true);
+            }}
+            left={<Icon name="plus" size={14} tone="gold" />}
+          >
+            Seal
+          </Chip>
+
+          {!activeVault ? (
+            <Chip
+              size="sm"
+              selected={false}
+              variant="outline"
+              onClick={() => actions.requireAuth("auth")}
+              left={<Icon name="scan" size={14} tone="cyan" />}
+            >
+              Inhale
+            </Chip>
+          ) : (
+            <Chip size="sm" selected={false} variant="outline" left={<Icon name="vault" size={14} tone="dim" />}>
+              bound
+            </Chip>
+          )}
+        </div>
+      </div>
+
+      {mode === "leaderboard" ? (
+        <ProphecyLeaderboard rows={leaderboard} />
+      ) : prophecies.length === 0 ? (
+        <Card variant="glass">
+          <CardContent>
+            <div className="sm-title">No prophecies yet.</div>
+            <div className="sm-subtitle" style={{ marginTop: 8 }}>
+              Seal a prediction as a portable proof-of-forecast. It can stand alone or accompany a wager.
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <Chip
+                size="sm"
+                selected={false}
+                tone="gold"
+                onClick={() => {
+                  setSheetMarketId(null);
+                  setSheetOpen(true);
+                }}
+                left={<Icon name="spark" size={14} tone="gold" />}
+              >
+                Seal your first prophecy
               </Chip>
-            </div>
-
-            <div className="sm-proph-mid">
-              <span className={`sm-proph-side ${p.side === "YES" ? "is-yes" : "is-no"}`}>{p.side}</span>
-              <span className="sm-small">sealed p {p.createdAt.pulse}</span>
-              <span className="sm-small">by {author}</span>
-            </div>
-
-            <div className="sm-proph-foot">
-              <span className="sm-pill">
-                <Icon name="check" size={14} tone="dim" /> {outcomeText}
-              </span>
-
-              {p.positionId ? (
-                <span className="sm-pill">
-                  <Icon name="positions" size={14} tone="dim" /> linked
-                </span>
-              ) : null}
-
-              {p.visibility === "private" ? (
-                <span className="sm-pill">
-                  <Icon name="warning" size={14} tone="dim" /> private
-                </span>
-              ) : null}
             </div>
           </CardContent>
         </Card>
-      </button>
+      ) : (
+        <div className="sm-proph-list">
+          {prophecies.slice(0, 60).map((p) => (
+            <ProphecyCard
+              key={p.id as unknown as string}
+              prophecy={p}
+              now={props.now}
+              marketQuestion={questionById.get(p.marketId as unknown as string) ?? "Market"}
+              onSealMore={() => {
+                setSheetMarketId(p.marketId);
+                setSheetOpen(true);
+              }}
+              onOpenMarket={() => ui.navigate({ view: "market", marketId: p.marketId })}
+              onRemove={() => actions.remove(p.id)}
+            />
+          ))}
+        </div>
+      )}
 
-      <div className="sm-proph-actions">
-        <Chip size="sm" selected={false} onClick={props.onSealMore} tone="gold" left={<Icon name="plus" size={14} tone="gold" />}>
-          Seal
-        </Chip>
-        <Chip size="sm" selected={false} onClick={props.onRemove} variant="outline" tone="danger" left={<Icon name="x" size={14} tone="danger" />}>
-          Remove
-        </Chip>
-      </div>
+      <SealPredictionSheet
+        open={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        now={props.now}
+        initialMarketId={sheetMarketId}
+      />
     </div>
   );
 };

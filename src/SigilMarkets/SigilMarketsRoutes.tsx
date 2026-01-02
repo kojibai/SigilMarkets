@@ -2,7 +2,7 @@
 "use client";
 
 import { useMemo, type RefObject } from "react";
-import type { KaiMoment, MarketId } from "./types/marketTypes";
+import type { KaiMoment } from "./types/marketTypes";
 import { useSigilMarketsUi } from "./state/uiStore";
 
 import { MarketGrid } from "./views/MarketGrid/MarketGrid";
@@ -17,7 +17,6 @@ import { SigilMarketsDock } from "./SigilMarketsDock";
 import { SigilShareSheet } from "./sigils/SigilShareSheet";
 import { useSigilMarketsPositionStore } from "./state/positionStore";
 
-// Sheet stack renderers
 import { InhaleGlyphGate } from "./sigils/InhaleGlyphGate";
 import { SealPredictionSheet } from "./views/Prophecy/SealPredictionSheet";
 
@@ -47,7 +46,6 @@ const SheetsLayer = (props: Readonly<{ now: KaiMoment }>) => {
   if (top.id === "share-sigil") {
     const refId = top.refId;
 
-    // MVP: share a Position sigil by position id
     const pos = posState.byId[refId] ?? null;
     const svgUrl = pos?.sigil?.url;
 
@@ -75,10 +73,24 @@ export const SigilMarketsRoutes = (props: SigilMarketsRoutesProps) => {
         return <MarketGrid now={props.now} scrollMode={props.scrollMode} scrollRef={props.scrollRef} />;
 
       case "market":
-        return <MarketRoom marketId={route.marketId} now={props.now} scrollMode={props.scrollMode} scrollRef={props.scrollRef} />;
+        return (
+          <MarketRoom
+            marketId={route.marketId}
+            now={props.now}
+            scrollMode={props.scrollMode}
+            scrollRef={props.scrollRef}
+          />
+        );
 
       case "vault":
-        return <VaultPanel vaultId={route.vaultId} now={props.now} scrollMode={props.scrollMode} scrollRef={props.scrollRef} />;
+        return (
+          <VaultPanel
+            vaultId={route.vaultId}
+            now={props.now}
+            scrollMode={props.scrollMode}
+            scrollRef={props.scrollRef}
+          />
+        );
 
       case "positions":
         return <PositionsHome now={props.now} scrollMode={props.scrollMode} scrollRef={props.scrollRef} />;
@@ -90,14 +102,18 @@ export const SigilMarketsRoutes = (props: SigilMarketsRoutesProps) => {
         return <ProphecyFeed now={props.now} scrollMode={props.scrollMode} scrollRef={props.scrollRef} />;
 
       case "resolution":
-        return <ResolutionCenter marketId={route.marketId} now={props.now} scrollMode={props.scrollMode} scrollRef={props.scrollRef} />;
+        return (
+          <ResolutionCenter
+            marketId={route.marketId}
+            now={props.now}
+            scrollMode={props.scrollMode}
+            scrollRef={props.scrollRef}
+          />
+        );
 
-      default: {
-        // exhaustive
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const _never: never = route;
+      default:
+        // Defensive fallback (should never happen)
         return <MarketGrid now={props.now} scrollMode={props.scrollMode} scrollRef={props.scrollRef} />;
-      }
     }
   }, [props.now, props.scrollMode, props.scrollRef, route]);
 
