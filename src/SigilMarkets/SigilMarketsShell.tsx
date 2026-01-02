@@ -1,94 +1,224 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { SigilMarketsRoutes } from './SigilMarketsRoutes';
-import { SigilMarketsDock } from './SigilMarketsDock';
-import { TopBar } from './ui/chrome/TopBar';
-import { BreathGlow } from './ui/motion/BreathGlow';
-import { useScrollRestoration } from './hooks/useScrollRestoration';
-import { useMarketStore } from './state/marketStore';
-import { useVaultStore } from './state/vaultStore';
-import { usePositionStore } from './state/positionStore';
-import { useFeedStore } from './state/feedStore';
-import { useUiStore } from './state/uiStore';
-import { fetchMarkets } from './api/marketApi';
-import { fetchVault } from './api/vaultApi';
-import { fetchPositions } from './api/positionApi';
-import { fetchOracleSignals } from './api/oracleApi';
+// SigilMarkets/SigilMarketsShell.tsx
+"use client";
 
-export const SigilMarketsShell = () => {
-  const setMarkets = useMarketStore((state) => state.setMarkets);
-  const setVault = useVaultStore((state) => state.setVault);
-  const setPositions = usePositionStore((state) => state.setPositions);
-  const setSignals = useFeedStore((state) => state.setSignals);
-  const { isImmersive, toggleImmersive } = useUiStore();
-  const [network, setNetwork] = useState('online');
-  const [battery, setBattery] = useState<number | null>(null);
+import React, { useEffect, useMemo, useRef } from "react";
+import "./styles/sigilMarkets.css";
+import "./styles/breathe.css";
+import "./styles/motion.css";
 
-  useScrollRestoration();
+import { SigilMarketsUiProvider, useSigilMarketsUi } from "./state/uiStore";
+import { SigilMarketsMarketProvider, useSigilMarketsMarketStore } from "./state/marketStore";
+import { SigilMarketsVaultProvider } from "./state/vaultStore";
+import { SigilMarketsPositionProvider, useSigilMarketsPositionStore } from "./state/positionStore";
+import { SigilMarketsFeedProvider, useSigilMarketsFeedStore } from "./state/feedStore";
 
-  useQuery({
-    queryKey: ['markets'],
-    queryFn: fetchMarkets,
-    onSuccess: setMarkets
+import { SigilMarketsRoutes } from "./SigilMarketsRoutes";
+
+import { usePulseTicker } from "./hooks/usePulseTicker";
+import { useSfx } from "./hooks/useSfx";
+
+import { defaultMarketApiConfig, fetchMarkets, type SigilMarketsMarketApiConfig } from "./api/marketApi";
+import type { KaiMoment, Market, MarketOutcome } from "./types/marketTypes";
+
+export type SigilMarketsShellProps = Readonly<{
+  className?: string;
+  style?: React.CSSProperties;
+
+  /** Optional override: remote/local config for market list. */
+  marketApiConfig?: SigilMarketsMarketApiConfig;
+
+  /**
+   * If true, renders without an internal scroll container and assumes window scroll.
+   * Default: false (container scroll).
+   */
+  windowScroll?: boolean;
+}>;
+
+type AppliedResolutionKey = string;
+
+const isResolvedLike = (status: string): boolean =>
+  status === "resolved" || status === "voided" || status === "canceled";
+
+const resolutionKey = (m: Market): AppliedResolutionKey => {
+  const rid = m.state.resolution;
+  if (!rid) return `${m.def.id}:none`;
+  return `${m.def.id}:${rid.outcome}:${rid.resolvedPulse}`;
+};
+
+const ShellInner = (props: Readonly<{ marketApiConfig?: SigilMarketsMarketApiConfig; windowScroll: boolean }>) => {
+  const { state: uiState, actions: ui } = useSigilMarketsUi();
+  const { state: marketState, actions: markets } = useSigilMarketsMarketStore();
+  const { actions: positions } = useSigilMarketsPositionStore();
+  const { actions: feed } = useSigilMarketsFeedStore();
+
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  const { moment } = usePulseTicker({
+    enabled: true,
+    syncOnVisibility: true,
+    pauseWhenHidden: false,
   });
 
-  useQuery({
-    queryKey: ['vault'],
-    queryFn: fetchVault,
-    onSuccess: setVault
-  });
+  const marketCfg = useMemo(() => props.marketApiConfig ?? defaultMarketApiConfig(), [props.marketApiConfig]);
 
-  useQuery({
-    queryKey: ['positions'],
-    queryFn: fetchPositions,
-    onSuccess: setPositions
-  });
-
-  useQuery({
-    queryKey: ['signals'],
-    queryFn: fetchOracleSignals,
-    onSuccess: setSignals
-  });
-
+  // Audio unlock on first gesture (best-effort).
+  const sfx = useSfx();
   useEffect(() => {
-    const updateNetwork = () => setNetwork(navigator.onLine ? 'online' : 'offline');
-    window.addEventListener('online', updateNetwork);
-    window.addEventListener('offline', updateNetwork);
-    updateNetwork();
+    if (typeof window === "undefined") return;
+
+    const onGesture = (): void => {
+      sfx.unlock();
+      window.removeEventListener("pointerdown", onGesture);
+      window.removeEventListener("touchstart", onGesture);
+      window.removeEventListener("keydown", onGesture);
+    };
+
+    window.addEventListener("pointerdown", onGesture, { passive: true });
+    window.addEventListener("touchstart", onGesture, { passive: true });
+    window.addEventListener("keydown", onGesture);
 
     return () => {
-      window.removeEventListener('online', updateNetwork);
-      window.removeEventListener('offline', updateNetwork);
+      window.removeEventListener("pointerdown", onGesture);
+      window.removeEventListener("touchstart", onGesture);
+      window.removeEventListener("keydown", onGesture);
     };
-  }, []);
+  }, [sfx]);
 
-  useEffect(() => {
-    if (!('getBattery' in navigator)) {
+  // Market fetch orchestration (offline-first, event-driven).
+  const inFlightRef = useRef<boolean>(false);
+  const lastFetchPulseRef = useRef<number>(-1);
+
+  const doFetchMarkets = async (reason: "mount" | "focus" | "visible" | "online" | "manual"): Promise<void> => {
+    if (inFlightRef.current) return;
+
+    // Avoid refetching multiple times inside the same pulse unless manual.
+    if (reason !== "manual" && lastFetchPulseRef.current === moment.pulse) return;
+
+    inFlightRef.current = true;
+    lastFetchPulseRef.current = moment.pulse;
+
+    markets.setStatus("loading");
+
+    const res = await fetchMarkets(marketCfg, moment.pulse);
+
+    if (!res.ok) {
+      markets.setStatus("error", res.error);
+      ui.toast("warning", "Markets offline", res.error);
+      inFlightRef.current = false;
       return;
     }
-    const setupBattery = async () => {
-      const batteryManager = await (navigator as Navigator & { getBattery: () => Promise<BatteryManager> }).getBattery();
-      setBattery(batteryManager.level);
-      batteryManager.addEventListener('levelchange', () => setBattery(batteryManager.level));
-    };
-    void setupBattery();
-  }, []);
 
-  const aura = useMemo(() => (isImmersive ? 'sm-shell sm-shell--immersive' : 'sm-shell'), [isImmersive]);
+    markets.setMarkets(res.markets, { lastSyncedPulse: res.lastSyncedPulse });
+
+    if (res.isStale) {
+      ui.toast("info", "Using cached markets", "Refreshing…");
+    }
+
+    inFlightRef.current = false;
+  };
+
+  useEffect(() => {
+    void doFetchMarkets("mount");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [marketCfg]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof document === "undefined") return;
+
+    const onFocus = (): void => void doFetchMarkets("focus");
+    const onOnline = (): void => void doFetchMarkets("online");
+    const onVisibility = (): void => {
+      if (document.visibilityState === "visible") void doFetchMarkets("visible");
+    };
+
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("online", onOnline);
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("online", onOnline);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [marketCfg, moment.pulse]);
+
+  // Apply market resolutions to positions + prophecies exactly once per (marketId,outcome,resolvedPulse).
+  const appliedResolutionsRef = useRef<Set<AppliedResolutionKey>>(new Set());
+
+  useEffect(() => {
+    const list = marketState.ids
+      .map((id) => marketState.byId[id as unknown as string])
+      .filter((m): m is Market => m !== undefined);
+
+    for (const m of list) {
+      if (!isResolvedLike(m.state.status)) continue;
+      const r = m.state.resolution;
+      if (!r) continue;
+
+      const key = resolutionKey(m);
+      if (appliedResolutionsRef.current.has(key)) continue;
+
+      appliedResolutionsRef.current.add(key);
+
+      const outcome: MarketOutcome = r.outcome;
+
+      // Apply to all open positions for the market (positionStore).
+      positions.applyMarketResolution({
+        marketId: m.def.id,
+        outcome,
+        resolvedPulse: r.resolvedPulse,
+        evidenceHashes: r.evidence?.hashes,
+      });
+
+      // Apply to prophecies for the market (feedStore).
+      feed.applyMarketResolutionToProphecies({
+        marketId: m.def.id,
+        outcome,
+        resolvedPulse: r.resolvedPulse,
+        evidenceHashes: r.evidence?.hashes,
+      });
+
+      ui.toast("info", "Market resolved", `${m.def.question}`, { atPulse: r.resolvedPulse });
+      sfx.play("resolve");
+    }
+  }, [feed, marketState.byId, marketState.ids, positions, sfx, ui]);
+
+  const shellClass = `sm-shell${props.windowScroll ? " sm-window-scroll" : " sm-container-scroll"}`;
+
+  if (props.windowScroll) {
+    return (
+      <div className={shellClass} data-sm="shell">
+        <SigilMarketsRoutes now={moment} scrollMode="window" scrollRef={null} />
+      </div>
+    );
+  }
 
   return (
-    <div className={aura}>
-      <BreathGlow />
-      <TopBar onModeToggle={toggleImmersive} isImmersive={isImmersive} />
-      <div className="sm-shell__status">
-        <span>Network: {network}</span>
-        <span>Battery: {battery ? `${Math.round(battery * 100)}%` : '—'}</span>
-        <span>Kai aware</span>
+    <div className={shellClass} data-sm="shell">
+      <div className="sm-scroll" ref={scrollRef}>
+        <SigilMarketsRoutes now={moment} scrollMode="container" scrollRef={scrollRef} />
       </div>
-      <main className="sm-shell__main">
-        <SigilMarketsRoutes />
-      </main>
-      <SigilMarketsDock />
+    </div>
+  );
+};
+
+export const SigilMarketsShell = (props: SigilMarketsShellProps) => {
+  const windowScroll = props.windowScroll ?? false;
+
+  return (
+    <div className={props.className} style={props.style} data-sm-root="1">
+      <SigilMarketsUiProvider>
+        <SigilMarketsMarketProvider>
+          <SigilMarketsVaultProvider>
+            <SigilMarketsPositionProvider>
+              <SigilMarketsFeedProvider>
+                <ShellInner marketApiConfig={props.marketApiConfig} windowScroll={windowScroll} />
+              </SigilMarketsFeedProvider>
+            </SigilMarketsPositionProvider>
+          </SigilMarketsVaultProvider>
+        </SigilMarketsMarketProvider>
+      </SigilMarketsUiProvider>
     </div>
   );
 };

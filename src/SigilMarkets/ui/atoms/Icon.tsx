@@ -1,6 +1,119 @@
-import type { HTMLAttributes } from 'react';
-import clsx from 'clsx';
+// SigilMarkets/ui/atoms/Icon.tsx
+"use client";
 
-export const Icon = ({ className, ...props }: HTMLAttributes<HTMLSpanElement>) => {
-  return <span className={clsx('sm-icon', className)} {...props} />;
+import React, { useMemo } from "react";
+
+export type IconName =
+  | "hex"
+  | "spark"
+  | "vault"
+  | "positions"
+  | "prophecy"
+  | "yes"
+  | "no"
+  | "clock"
+  | "share"
+  | "export"
+  | "scan"
+  | "back"
+  | "close"
+  | "warning"
+  | "check"
+  | "x"
+  | "plus"
+  | "minus";
+
+export type IconProps = Readonly<{
+  name: IconName;
+  size?: number; // px
+  tone?: "default" | "cyan" | "violet" | "gold" | "danger" | "success" | "dim";
+  className?: string;
+  style?: React.CSSProperties;
+  title?: string;
+}>;
+
+const cx = (...parts: Array<string | false | null | undefined>): string => parts.filter(Boolean).join(" ");
+
+const glyph = (name: IconName): string => {
+  switch (name) {
+    case "hex":
+      return "⬡";
+    case "spark":
+      return "✶";
+    case "vault":
+      return "Φ";
+    case "positions":
+      return "◎";
+    case "prophecy":
+      return "✦";
+    case "yes":
+      return "Y";
+    case "no":
+      return "N";
+    case "clock":
+      return "⟡";
+    case "share":
+      return "↗";
+    case "export":
+      return "⤓";
+    case "scan":
+      return "⌁";
+    case "back":
+      return "←";
+    case "close":
+      return "×";
+    case "warning":
+      return "!";
+    case "check":
+      return "✓";
+    case "x":
+      return "✕";
+    case "plus":
+      return "+";
+    case "minus":
+      return "−";
+    default: {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const _never: never = name;
+      return "⬡";
+    }
+  }
+};
+
+const toneClass = (tone: NonNullable<IconProps["tone"]>): string => {
+  switch (tone) {
+    case "cyan":
+      return "sm-ico-cyan";
+    case "violet":
+      return "sm-ico-violet";
+    case "gold":
+      return "sm-ico-gold";
+    case "danger":
+      return "sm-ico-danger";
+    case "success":
+      return "sm-ico-success";
+    case "dim":
+      return "sm-ico-dim";
+    case "default":
+    default:
+      return "sm-ico";
+  }
+};
+
+export const Icon = (props: IconProps) => {
+  const { name, size = 16, tone = "default", className, style, title } = props;
+
+  const cls = useMemo(() => cx("sm-ico-core", toneClass(tone), className), [tone, className]);
+
+  return (
+    <span
+      className={cls}
+      style={{ fontSize: `${size}px`, lineHeight: 1, ...style }}
+      role={title ? "img" : "presentation"}
+      aria-label={title}
+      aria-hidden={title ? undefined : true}
+    >
+      {glyph(name)}
+    </span>
+  );
 };

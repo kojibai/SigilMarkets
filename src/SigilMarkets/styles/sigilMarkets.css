@@ -1,608 +1,1982 @@
-:root {
-  color-scheme: dark;
-  font-family: 'Inter', 'SF Pro Display', system-ui, sans-serif;
-  background: #0b0d12;
-  color: #f3f4f6;
+/* SigilMarkets/styles/sigilMarkets.css */
+
+/* Root tokens (module-scoped via data-sm-root attr) */
+[data-sm-root="1"]{
+  --sm-bg: #070910;
+  --sm-panel: rgba(255,255,255,0.06);
+  --sm-panel2: rgba(255,255,255,0.08);
+  --sm-stroke: rgba(255,255,255,0.10);
+  --sm-stroke2: rgba(255,255,255,0.16);
+
+  --sm-text: rgba(255,255,255,0.92);
+  --sm-dim: rgba(255,255,255,0.70);
+  --sm-dimmer: rgba(255,255,255,0.56);
+
+  --sm-cyan: rgba(191,252,255,0.92);
+  --sm-cyan2: rgba(35,255,240,0.22);
+  --sm-violet: rgba(183,163,255,0.92);
+  --sm-violet2: rgba(183,163,255,0.20);
+  --sm-gold: rgba(255,219,138,0.90);
+  --sm-red: rgba(255,104,104,0.90);
+  --sm-green: rgba(120,255,200,0.90);
+
+  --sm-radius: 18px;
+  --sm-radius2: 24px;
+  --sm-shadow: 0 16px 50px rgba(0,0,0,0.45);
+
+  --sm-dock-h: 78px;
+  --sm-topbar-h: 60px;
+ 
+  --sm-gap: 12px;
+  --sm-pad: 14px;
+
+  --sm-font: ui-sans-serif, system-ui, -apple-system, "SF Pro Display", "SF Pro Text", "Inter", Arial, sans-serif;
 }
 
-* {
-  box-sizing: border-box;
+[data-sm-root="1"]{
+  color: var(--sm-text);
+  font-family: var(--sm-font);
 }
 
-body {
-  margin: 0;
-  background: radial-gradient(circle at top, rgba(69, 102, 255, 0.15), transparent 40%),
-    #0b0d12;
-}
-
-#root {
-  min-height: 100vh;
-}
-
-.sm-shell {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  padding: 24px 24px 110px;
-  background: linear-gradient(145deg, rgba(20, 24, 35, 0.9), rgba(8, 10, 14, 0.95));
+.sm-shell{
+  width: 100%;
+  height: 100%;
+  background:
+    radial-gradient(1100px 800px at 20% 10%, rgba(191,252,255,0.12), transparent 55%),
+    radial-gradient(900px 700px at 88% 16%, rgba(183,163,255,0.10), transparent 55%),
+    radial-gradient(900px 700px at 60% 90%, rgba(255,219,138,0.06), transparent 55%),
+    linear-gradient(180deg, #070910, #04050a 70%, #050513);
   position: relative;
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
-.sm-shell--immersive {
-  background: radial-gradient(circle at 20% 20%, rgba(125, 97, 255, 0.25), transparent 50%),
-    radial-gradient(circle at 80% 20%, rgba(70, 220, 190, 0.2), transparent 45%),
-    #090b10;
+.sm-window-scroll{
+  overflow: visible;
 }
 
-.sm-shell__main {
-  display: flex;
-  flex-direction: column;
-  gap: 32px;
+.sm-container-scroll{
+  overflow: hidden;
 }
 
-.sm-shell__status {
-  display: flex;
-  gap: 16px;
-  align-items: center;
-  justify-content: flex-start;
-  font-size: 0.85rem;
-  color: rgba(216, 221, 255, 0.6);
+.sm-scroll{
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: calc(var(--sm-dock-h) + env(safe-area-inset-bottom));
 }
 
-.sm-topbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
+.sm-routes{
+  min-height: 100%;
+  padding-bottom: calc(var(--sm-dock-h) + env(safe-area-inset-bottom));
 }
 
-.sm-topbar__title {
-  font-size: 1.4rem;
-  font-weight: 600;
+/* Dock */
+.sm-dock{
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  z-index: 50;
+  pointer-events: none;
 }
 
-.sm-topbar__subtitle {
-  font-size: 0.9rem;
-  color: rgba(216, 221, 255, 0.6);
+.sm-dock-inner{
+  pointer-events: auto;
+  height: var(--sm-dock-h);
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 24px;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.50);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  padding: 8px;
 }
 
-.sm-topbar__actions {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-}
-
-.sm-button {
-  border: none;
-  padding: 10px 18px;
-  border-radius: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  color: #f5f5f7;
-  background: linear-gradient(120deg, #4961ff, #7e8bff);
-  box-shadow: 0 10px 30px rgba(78, 98, 255, 0.35);
-}
-
-.sm-button--ghost {
+.sm-dock-btn{
+  appearance: none;
+  border: 0;
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: none;
+  color: var(--sm-dim);
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  gap: 2px;
+  padding: 8px 6px;
+  position: relative;
+  transition: transform 120ms ease, background 160ms ease, color 160ms ease;
 }
 
-.sm-button--glass {
-  background: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  box-shadow: none;
+.sm-dock-btn:active{
+  transform: scale(0.98);
 }
 
-.sm-card {
-  background: rgba(15, 18, 28, 0.8);
-  border-radius: 20px;
-  padding: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+.sm-dock-btn.is-active{
+  color: var(--sm-text);
+  background: rgba(255,255,255,0.08);
 }
 
-.sm-chip {
-  padding: 4px 10px;
+.sm-dock-icon{
+  font-size: 18px;
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+
+.sm-dock-label{
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  opacity: 0.95;
+}
+
+.sm-dock-badge{
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  background: rgba(255,104,104,0.92);
+  color: #0b0b12;
+  font-weight: 800;
+  font-size: 10px;
+  padding: 2px 7px;
   border-radius: 999px;
-  font-size: 0.75rem;
-  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255,255,255,0.20);
+  box-shadow: 0 10px 24px rgba(0,0,0,0.35);
 }
 
-.sm-chip--success {
-  background: rgba(70, 220, 190, 0.2);
-  color: #7ff0d1;
+.sm-dock-kai{
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+  color: rgba(255,255,255,0.55);
+  font-size: 11px;
+  letter-spacing: 0.02em;
 }
 
-.sm-chip--warning {
-  background: rgba(255, 202, 120, 0.2);
-  color: #ffc56a;
+.sm-dock-kai-dot{
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(191,252,255,0.65);
+  box-shadow: 0 0 0 6px rgba(191,252,255,0.08);
 }
 
-.sm-progress {
+/* Shared page layout */
+.sm-page{
+  padding: calc(var(--sm-topbar-h) + var(--sm-pad)) var(--sm-pad) var(--sm-pad);
+  max-width: 980px;
+  margin: 0 auto;
+}
+
+.sm-card{
+  background: var(--sm-panel);
+  border: 1px solid var(--sm-stroke);
+  border-radius: var(--sm-radius2);
+  box-shadow: var(--sm-shadow);
+}
+
+.sm-card2{
+  background: var(--sm-panel2);
+  border: 1px solid var(--sm-stroke);
+  border-radius: var(--sm-radius2);
+}
+
+.sm-row{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sm-title{
+  font-size: 20px;
+  letter-spacing: 0.01em;
+  line-height: 1.15;
+}
+
+.sm-subtitle{
+  font-size: 13px;
+  color: var(--sm-dim);
+  line-height: 1.25;
+}
+
+.sm-pill{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.10);
+  color: rgba(255,255,255,0.72);
+  font-size: 12px;
+}
+
+.sm-btn{
+  appearance: none;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.06);
+  color: var(--sm-text);
+  border-radius: 14px;
+  padding: 10px 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  transition: transform 120ms ease, background 160ms ease, border 160ms ease;
+}
+
+.sm-btn:active{
+  transform: scale(0.98);
+}
+
+.sm-btn-primary{
+  background: rgba(191,252,255,0.14);
+  border-color: rgba(191,252,255,0.24);
+}
+
+.sm-btn-danger{
+  background: rgba(255,104,104,0.12);
+  border-color: rgba(255,104,104,0.22);
+}
+
+.sm-muted{
+  color: var(--sm-dim);
+}
+
+.sm-small{
+  font-size: 12px;
+  color: var(--sm-dim);
+}
+
+/* Responsive */
+@media (max-width: 520px){
+  .sm-page{
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+  .sm-dock-label{
+    font-size: 10px;
+  }
+}
+/* Add these styles to SigilMarkets/styles/sigilMarkets.css (near .sm-btn) */
+
+.sm-btn-core{
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  user-select: none;
+}
+
+.sm-btn-inner{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.sm-btn-ico{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.92;
+}
+
+.sm-btn-label{
+  line-height: 1;
+}
+
+.sm-btn-sm{ padding: 8px 10px; border-radius: 12px; font-size: 13px; }
+.sm-btn-md{ padding: 10px 12px; border-radius: 14px; font-size: 14px; }
+.sm-btn-lg{ padding: 12px 14px; border-radius: 16px; font-size: 15px; }
+
+.sm-btn-default{ background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.14); }
+.sm-btn-ghost{ background: transparent; border-color: rgba(255,255,255,0.10); }
+.sm-btn-ghost:hover{ background: rgba(255,255,255,0.05); }
+
+.sm-btn.is-disabled{
+  opacity: 0.58;
+  cursor: not-allowed;
+}
+
+.sm-btn.is-loading{
+  color: rgba(255,255,255,0.70);
+}
+
+.sm-btn-spinner{
+  position: absolute;
+  right: 10px;
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  justify-content: center;
+}
+
+.sm-btn-spinner-dot{
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(191,252,255,0.85);
+  opacity: 0.35;
+  animation: smBtnDot 900ms ease-in-out infinite;
+}
+
+.sm-btn-spinner-dot:nth-child(2){ animation-delay: 120ms; }
+.sm-btn-spinner-dot:nth-child(3){ animation-delay: 240ms; }
+
+@keyframes smBtnDot{
+  0%, 100%{ transform: translateY(0px); opacity: 0.35; }
+  45%{ transform: translateY(-2px); opacity: 0.95; }
+}
+/* Add these styles to SigilMarkets/styles/sigilMarkets.css */
+
+.sm-card-core{
+  width: 100%;
+}
+
+.sm-card-plain{
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: var(--sm-radius2);
+}
+
+.sm-card-header,
+.sm-card-content,
+.sm-card-footer{
+  padding: 14px;
+}
+
+.sm-card-header{
+  padding-bottom: 10px;
+}
+
+.sm-card-footer{
+  padding-top: 10px;
+}
+
+.sm-card-header.is-compact,
+.sm-card-content.is-compact,
+.sm-card-footer.is-compact{
+  padding: 10px 12px;
+}
+
+.sm-card-divider{
+  height: 1px;
+  width: 100%;
+  background: rgba(255,255,255,0.10);
+  opacity: 0.9;
+}
+/* Add these styles to SigilMarkets/styles/sigilMarkets.css */
+
+.sm-chip{
+  appearance: none;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.78);
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  user-select: none;
+  transition: transform 120ms ease, background 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.sm-chip:active{ transform: scale(0.98); }
+
+.sm-chip-sm{ padding: 6px 10px; font-size: 12px; }
+.sm-chip-md{ padding: 8px 12px; font-size: 13px; }
+
+.sm-chip-ico{ opacity: 0.9; display: inline-flex; align-items: center; justify-content: center; }
+.sm-chip-label{ line-height: 1; }
+
+.sm-chip-soft{ }
+.sm-chip-solid{ background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.18); }
+.sm-chip-outline{ background: transparent; border-color: rgba(255,255,255,0.18); }
+
+.sm-chip.is-selected{
+  color: rgba(255,255,255,0.92);
+  background: rgba(255,255,255,0.10);
+  border-color: rgba(255,255,255,0.22);
+}
+
+/* Tone accents */
+.sm-chip-cyan.is-selected{ background: rgba(191,252,255,0.14); border-color: rgba(191,252,255,0.26); }
+.sm-chip-violet.is-selected{ background: rgba(183,163,255,0.14); border-color: rgba(183,163,255,0.26); }
+.sm-chip-gold.is-selected{ background: rgba(255,219,138,0.14); border-color: rgba(255,219,138,0.26); }
+.sm-chip-danger.is-selected{ background: rgba(255,104,104,0.14); border-color: rgba(255,104,104,0.26); }
+.sm-chip-success.is-selected{ background: rgba(120,255,200,0.14); border-color: rgba(120,255,200,0.26); }
+/* Add these styles to SigilMarkets/styles/sigilMarkets.css */
+
+.sm-divider{
+  width: 100%;
+  height: 1px;
+  background: rgba(255,255,255,0.10);
+  opacity: 0.9;
+}
+
+.sm-divider.is-strong{
+  background: rgba(255,255,255,0.16);
+}
+
+.sm-divider.is-vertical{
+  width: 1px;
+  height: 100%;
+}
+/* Add these styles to SigilMarkets/styles/sigilMarkets.css */
+
+.sm-ico-core{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  letter-spacing: 0.02em;
+  transform: translateY(-0.5px);
+}
+
+.sm-ico{ color: rgba(255,255,255,0.86); }
+.sm-ico-dim{ color: rgba(255,255,255,0.62); }
+
+.sm-ico-cyan{ color: var(--sm-cyan); }
+.sm-ico-violet{ color: var(--sm-violet); }
+.sm-ico-gold{ color: var(--sm-gold); }
+.sm-ico-danger{ color: var(--sm-red); }
+.sm-ico-success{ color: var(--sm-green); }
+/* Add these styles to SigilMarkets/styles/sigilMarkets.css */
+
+.sm-ring{
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sm-ring-svg{
+  display: block;
   transform: rotate(-90deg);
 }
 
-.sm-progress__bg {
-  fill: none;
-  stroke: rgba(255, 255, 255, 0.1);
-  stroke-width: 6;
+.sm-ring-track{
+  stroke: rgba(255,255,255,0.10);
 }
 
-.sm-progress__value {
-  fill: none;
-  stroke: #7e8bff;
-  stroke-width: 6;
-  stroke-linecap: round;
-  transition: stroke-dashoffset 0.4s ease;
+.sm-ring-bar{
+  stroke: rgba(191,252,255,0.9);
+  filter: drop-shadow(0 8px 18px rgba(0,0,0,0.25));
 }
 
-.sm-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+.sm-ring-label{
+  position: absolute;
+  font-size: 11px;
+  color: rgba(255,255,255,0.78);
+  letter-spacing: 0.02em;
 }
 
-.sm-grid__cells {
+/* tones */
+.sm-ring-cyan .sm-ring-bar{ stroke: rgba(191,252,255,0.90); }
+.sm-ring-violet .sm-ring-bar{ stroke: rgba(183,163,255,0.90); }
+.sm-ring-gold .sm-ring-bar{ stroke: rgba(255,219,138,0.90); }
+.sm-ring-danger .sm-ring-bar{ stroke: rgba(255,104,104,0.92); }
+.sm-ring-success .sm-ring-bar{ stroke: rgba(120,255,200,0.92); }
+.sm-ring-dim .sm-ring-bar{ stroke: rgba(255,255,255,0.45); }
+/* Add these styles to SigilMarkets/styles/sigilMarkets.css */
+
+.sm-seg{
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 16px;
-}
-
-.sm-market-cell {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  cursor: pointer;
-  transition: transform 0.2s ease;
-}
-
-.sm-market-cell:hover {
-  transform: translateY(-4px);
-}
-
-.sm-market-cell__title {
-  font-weight: 600;
-}
-
-.sm-market-cell__subtitle {
-  font-size: 0.85rem;
-  color: rgba(216, 221, 255, 0.65);
-}
-
-.sm-market-cell__row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.sm-market-cell__volume {
-  font-size: 0.75rem;
-  color: rgba(216, 221, 255, 0.6);
-}
-
-.sm-market-cell__prices {
-  display: flex;
-  gap: 12px;
-  font-weight: 600;
-}
-
-.sm-market-cell__footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.sm-market-cell__oracle {
-  font-size: 0.85rem;
-}
-
-.sm-market-cell__risk {
-  font-size: 0.75rem;
-  color: rgba(216, 221, 255, 0.55);
-}
-
-.sm-search {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.sm-search input {
-  background: transparent;
-  border: none;
-  color: inherit;
-  flex: 1;
-  outline: none;
-}
-
-.sm-filter-row {
-  display: flex;
-  justify-content: flex-start;
-}
-
-.sm-segmented {
-  display: flex;
-  gap: 8px;
-  background: rgba(255, 255, 255, 0.05);
-  padding: 6px;
-  border-radius: 999px;
-}
-
-.sm-segmented__item {
-  background: transparent;
-  border: none;
-  color: inherit;
-  padding: 6px 12px;
-  border-radius: 999px;
-  cursor: pointer;
-}
-
-.sm-segmented__item.is-active {
-  background: rgba(255, 255, 255, 0.15);
-}
-
-.sm-empty {
-  padding: 24px;
-  text-align: center;
-  color: rgba(216, 221, 255, 0.6);
-}
-
-.sm-grid__skeleton {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 16px;
-}
-
-.sm-skeleton {
-  min-height: 140px;
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05));
-  animation: shimmer 2s infinite;
-}
-
-.sm-room {
-  display: grid;
-  gap: 18px;
-}
-
-.sm-room__header {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: center;
-}
-
-.sm-room__title {
-  font-size: 1.2rem;
-  font-weight: 600;
-}
-
-.sm-room__subtitle {
-  color: rgba(216, 221, 255, 0.6);
-}
-
-.sm-room__countdown {
-  font-size: 0.9rem;
-  color: #7ff0d1;
-}
-
-.sm-room__chart {
-  background: rgba(255, 255, 255, 0.04);
-  padding: 16px;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
   border-radius: 16px;
+  padding: 4px;
+  gap: 4px;
+}
+
+.sm-seg.is-sm{ border-radius: 14px; }
+.sm-seg.is-disabled{ opacity: 0.6; }
+
+.sm-seg-btn{
+  appearance: none;
+  border: 0;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  background: transparent;
+  color: rgba(255,255,255,0.70);
+  transition: background 160ms ease, color 160ms ease, transform 120ms ease;
+}
+
+.sm-seg.is-sm .sm-seg-btn{
+  padding: 8px 10px;
+  border-radius: 11px;
+  font-size: 13px;
+}
+
+.sm-seg-btn:active{ transform: scale(0.99); }
+
+.sm-seg-btn.is-active{
+  background: rgba(255,255,255,0.10);
+  color: rgba(255,255,255,0.92);
+}
+
+/* tone accents (only when active) */
+.sm-seg-btn.is-active.is-cyan{ background: rgba(191,252,255,0.14); }
+.sm-seg-btn.is-active.is-violet{ background: rgba(183,163,255,0.14); }
+.sm-seg-btn.is-active.is-gold{ background: rgba(255,219,138,0.14); }
+.sm-seg-btn.is-active.is-danger{ background: rgba(255,104,104,0.14); }
+.sm-seg-btn.is-active.is-success{ background: rgba(120,255,200,0.14); }
+/* Add these styles to SigilMarkets/styles/sigilMarkets.css */
+
+.sm-sheet{
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+
+.sm-sheet.is-open{
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.sm-sheet-backdrop{
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.sm-sheet-panel{
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 0;
+  width: min(980px, 100%);
+  border-radius: 26px 26px 0 0;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+  box-shadow: 0 -20px 70px rgba(0,0,0,0.55);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  padding-bottom: env(safe-area-inset-bottom);
+  max-height: 88vh;
+  overflow: hidden;
+}
+
+.sm-sheet.is-sm .sm-sheet-panel{ max-height: 62vh; }
+.sm-sheet.is-lg .sm-sheet-panel{ max-height: 94vh; }
+
+.sm-sheet-grab{
   display: grid;
-  gap: 8px;
+  place-items: center;
+  padding: 10px 0 4px;
 }
 
-.sm-room__chart-line {
-  height: 2px;
-  background: linear-gradient(90deg, #7e8bff, transparent);
+.sm-sheet-grab span{
+  width: 46px;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.20);
 }
 
-.sm-room__panel {
-  background: rgba(255, 255, 255, 0.05);
-  padding: 18px;
+.sm-sheet-head{
+  padding: 10px 14px 0;
+}
+
+.sm-sheet-title{
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 0.01em;
+  color: rgba(255,255,255,0.92);
+}
+
+.sm-sheet-subtitle{
+  margin-top: 4px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.66);
+  line-height: 1.35;
+}
+
+.sm-sheet-body{
+  padding: 12px 14px 14px;
+  overflow: auto;
+  max-height: calc(88vh - 120px);
+  -webkit-overflow-scrolling: touch;
+}
+
+.sm-sheet-footer{
+  padding: 12px 14px 14px;
+  border-top: 1px solid rgba(255,255,255,0.10);
+}
+/* Add these styles to SigilMarkets/styles/sigilMarkets.css */
+
+.sm-tip-host{
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.sm-tip{
+  position: fixed;
+  z-index: 120;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(2px) scale(0.98);
+  transition: opacity 120ms ease, transform 120ms ease;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(0,0,0,0.72);
+  color: rgba(255,255,255,0.92);
+  border: 1px solid rgba(255,255,255,0.14);
+  box-shadow: 0 18px 60px rgba(0,0,0,0.55);
+  max-width: min(320px, 90vw);
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.sm-tip.is-open{
+  opacity: 1;
+  transform: translateY(0px) scale(1);
+}
+/* Add these styles to SigilMarkets/styles/sigilMarkets.css */
+
+.sm-toast-host{
+  position: fixed;
+  top: 10px;
+  left: 0;
+  right: 0;
+  z-index: 140;
+  display: grid;
+  gap: 10px;
+  place-items: center;
+  pointer-events: none;
+  padding: 0 12px;
+}
+
+.sm-toast{
+  pointer-events: auto;
+  width: min(520px, 100%);
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
   border-radius: 18px;
-  display: grid;
-  gap: 16px;
+  box-shadow: 0 24px 70px rgba(0,0,0,0.55);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  padding: 10px 12px;
 }
 
-.sm-yesno {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-}
-
-.sm-yesno__option {
-  padding: 12px;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: transparent;
-  color: inherit;
-}
-
-.sm-yesno__option.is-active {
-  background: rgba(126, 139, 255, 0.2);
-}
-
-.sm-stake {
-  display: grid;
-  gap: 8px;
-}
-
-.sm-stake__value {
-  font-weight: 600;
-}
-
-.sm-quote {
+.sm-toast-head{
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 10px;
 }
 
-.sm-quote__label {
-  font-size: 0.8rem;
-  color: rgba(216, 221, 255, 0.6);
+.sm-toast-title{
+  font-weight: 900;
+  letter-spacing: 0.01em;
+  font-size: 13px;
+  color: rgba(255,255,255,0.92);
 }
 
-.sm-quote__value {
-  font-weight: 600;
+.sm-toast-msg{
+  margin-top: 4px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.72);
+  line-height: 1.35;
 }
 
-.sm-room__panel-actions {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
+.sm-toast-x{
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: rgba(255,255,255,0.70);
+  font-size: 18px;
+  line-height: 1;
 }
 
-.sm-room__split {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 16px;
+.sm-toast.is-success{ border-color: rgba(120,255,200,0.22); }
+.sm-toast.is-warning{ border-color: rgba(255,219,138,0.22); }
+.sm-toast.is-error{ border-color: rgba(255,104,104,0.22); }
+.sm-toast.is-info{ border-color: rgba(191,252,255,0.16); }
+/* Add these styles to SigilMarkets/styles/sigilMarkets.css */
+
+.sm-topbar{
+  position: sticky;
+  top: 0;
+  z-index: 60;
 }
 
-.sm-oracle {
+.sm-topbar-row{
+  height: var(--sm-topbar-h);
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
+  padding: 10px 14px;
 }
 
-.sm-oracle__icon {
-  font-size: 1.8rem;
-}
-
-.sm-oracle__confidence {
-  margin-left: auto;
-  font-weight: 600;
-}
-
-.sm-vault {
-  display: grid;
-  gap: 16px;
-}
-
-.sm-vault__sigil {
+.sm-topbar-left{
   display: flex;
-  gap: 12px;
   align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
 
-.sm-vault__title {
-  font-size: 1.1rem;
-  font-weight: 600;
-}
-
-.sm-vault__balance {
-  text-align: center;
-}
-
-.sm-vault__value {
-  font-size: 1.6rem;
-  font-weight: 700;
-}
-
-.sm-vault__row {
+.sm-topbar-back{
+  appearance: none;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.05);
+  border-radius: 14px;
+  width: 40px;
+  height: 40px;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 16px;
+  place-items: center;
 }
 
-.sm-vault__growth {
-  padding: 16px;
-  background: rgba(255, 255, 255, 0.05);
+.sm-topbar-titles{
+  min-width: 0;
+}
+
+.sm-topbar-title{
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sm-topbar-sub{
+  font-size: 12px;
+  color: rgba(255,255,255,0.66);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sm-topbar-right{
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sm-topbar-kai{
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.05);
+  color: rgba(255,255,255,0.72);
+  font-size: 12px;
+}
+
+.sm-topbar-kai-dot{
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(191,252,255,0.72);
+  box-shadow: 0 0 0 6px rgba(191,252,255,0.10);
+}
+/* Add these styles to SigilMarkets/styles/sigilMarkets.css */
+
+.sm-grid-head{ margin-top: 10px; }
+
+.sm-grid-filters{
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.sm-grid-filter-row{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sm-grid-search{
+  flex: 1;
+  min-width: 0;
+  appearance: none;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.05);
+  color: rgba(255,255,255,0.78);
   border-radius: 16px;
-}
-
-.sm-vault__spark {
-  height: 80px;
-  background: linear-gradient(120deg, rgba(126, 139, 255, 0.6), rgba(70, 220, 190, 0.3));
-  border-radius: 12px;
-  margin-top: 10px;
-}
-
-.sm-vault__actions {
+  padding: 10px 12px;
   display: flex;
-  gap: 12px;
+  align-items: center;
+  gap: 10px;
+}
+
+.sm-grid-search-txt{
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+}
+
+.sm-grid-search-ico{
+  width: 28px;
+  height: 28px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: rgba(255,219,138,0.10);
+  border: 1px solid rgba(255,219,138,0.18);
+}
+
+.sm-grid-cat-row{
+  display: flex;
   flex-wrap: wrap;
+  gap: 8px;
 }
 
-.sm-positions {
+.sm-grid{
+  margin-top: 6px;
   display: grid;
-  gap: 16px;
-}
-
-.sm-positions__grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px;
 }
 
-.sm-position-card {
-  cursor: pointer;
+.sm-grid.is-honeycomb{
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (min-width: 720px){
+  .sm-grid.is-honeycomb{ grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (min-width: 980px){
+  .sm-grid.is-honeycomb{ grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+.sm-grid.is-list{
+  grid-template-columns: 1fr;
+}
+
+.sm-grid-cell{
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+}
+
+.sm-grid-card{
+  padding: 14px;
+  border-radius: 22px;
+}
+
+.sm-grid-card-top{
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sm-grid-q{
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+  color: rgba(255,255,255,0.92);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.sm-grid-meta{
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sm-grid-dot{
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(191,252,255,0.65);
+  box-shadow: 0 0 0 5px rgba(191,252,255,0.08);
+}
+
+.sm-grid-prices{
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.sm-grid-price{
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.05);
+  padding: 10px 10px;
+}
+
+.sm-grid-price-k{
+  font-size: 11px;
+  color: rgba(255,255,255,0.60);
+  font-weight: 900;
+  letter-spacing: 0.06em;
+}
+
+.sm-grid-price-v{
+  margin-top: 6px;
+  font-size: 18px;
+  font-weight: 950;
+  letter-spacing: 0.01em;
+}
+
+.sm-grid-price.yes .sm-grid-price-v{ color: rgba(191,252,255,0.92); }
+.sm-grid-price.no  .sm-grid-price-v{ color: rgba(183,163,255,0.92); }
+
+.sm-empty{
+  margin-top: 14px;
+}
+
+.sm-skel-cell{
+  height: 170px;
+  border-radius: 22px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: linear-gradient(90deg, rgba(255,255,255,0.05), rgba(255,255,255,0.10), rgba(255,255,255,0.05));
+  background-size: 240% 100%;
+  animation: smSkel 1.2s ease-in-out infinite;
+}
+
+@keyframes smSkel{
+  0%{ background-position: 0% 50%; opacity: 0.75; }
+  50%{ background-position: 100% 50%; opacity: 1; }
+  100%{ background-position: 0% 50%; opacity: 0.75; }
+}
+/* Add these styles to SigilMarkets/styles/sigilMarkets.css */
+
+.sm-stake{
+  display: grid;
+  gap: 10px;
+}
+
+.sm-stake-top{
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sm-stake-k{
+  font-size: 12px;
+  color: rgba(255,255,255,0.62);
+  font-weight: 900;
+  letter-spacing: 0.06em;
+}
+
+.sm-stake-v{
+  margin-top: 6px;
+  font-size: 20px;
+  font-weight: 950;
+  letter-spacing: 0.01em;
+}
+
+.sm-stake-slider{
+  position: relative;
   display: grid;
   gap: 6px;
 }
 
-.sm-position-detail {
-  background: rgba(255, 255, 255, 0.05);
-  padding: 18px;
-  border-radius: 16px;
+.sm-stake-slider input[type="range"]{
+  width: 100%;
+  accent-color: rgba(191,252,255,0.85);
 }
 
-.sm-position-detail__actions {
+.sm-stake-pct{
+  font-size: 12px;
+  color: rgba(255,255,255,0.62);
+  justify-self: end;
+}
+
+.sm-stake-presets{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sm-stake-input{
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.sm-input{
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.05);
+  color: rgba(255,255,255,0.90);
+  outline: none;
+}
+
+.sm-input::placeholder{
+  color: rgba(255,255,255,0.45);
+}
+/* Add these styles to SigilMarkets/styles/sigilMarkets.css */
+
+.sm-quote-head{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.sm-quote-title{
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.01em;
+  color: rgba(255,255,255,0.86);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sm-quote-side-pill{
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.06);
+  font-weight: 900;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+}
+
+.sm-quote-side-pill.is-yes{
+  border-color: rgba(191,252,255,0.24);
+  background: rgba(191,252,255,0.12);
+  color: rgba(191,252,255,0.92);
+}
+
+.sm-quote-side-pill.is-no{
+  border-color: rgba(183,163,255,0.24);
+  background: rgba(183,163,255,0.12);
+  color: rgba(183,163,255,0.92);
+}
+
+.sm-quote-grid{
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.sm-quote-row{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sm-quote-k{
+  font-size: 12px;
+  color: rgba(255,255,255,0.62);
+}
+
+.sm-quote-v{
+  font-size: 12px;
+  color: rgba(255,255,255,0.90);
+  font-weight: 800;
+}
+/* Add these styles to SigilMarkets/styles/sigilMarkets.css */
+
+.sm-lock-hero{
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.06);
+}
+
+.sm-lock-hero-ico{
+  width: 38px;
+  height: 38px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255,219,138,0.18);
+  background: rgba(255,219,138,0.10);
+}
+
+.sm-lock-hero-title{
+  font-size: 14px;
+  font-weight: 950;
+  letter-spacing: 0.01em;
+}
+
+.sm-lock-hero-sub{
+  margin-top: 2px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.62);
+}
+
+.sm-lock-grid{
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.sm-lock-row{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sm-lock-k{
+  font-size: 12px;
+  color: rgba(255,255,255,0.62);
+}
+
+.sm-lock-v{
+  font-size: 12px;
+  color: rgba(255,255,255,0.90);
+  font-weight: 900;
+}
+
+.sm-lock-warn{
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,104,104,0.22);
+  background: rgba(255,104,104,0.10);
+  color: rgba(255,255,255,0.86);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sm-lock-footer{
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+/* Add these styles to SigilMarkets/styles/sigilMarkets.css */
+
+.sm-mint-hero{
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.06);
+}
+
+.sm-mint-badge{
+  width: 38px;
+  height: 38px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(191,252,255,0.18);
+  background: rgba(191,252,255,0.10);
+}
+
+.sm-mint-title{
+  font-size: 14px;
+  font-weight: 950;
+  letter-spacing: 0.01em;
+}
+
+.sm-mint-sub{
+  margin-top: 2px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.62);
+}
+
+.sm-mint-grid{
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.sm-mint-row{
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sm-mint-k{
+  font-size: 12px;
+  color: rgba(255,255,255,0.62);
+}
+
+.sm-mint-v{
+  font-size: 12px;
+  color: rgba(255,255,255,0.90);
+  font-weight: 900;
+}
+
+.sm-mint-footer{
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+/* Add these styles to SigilMarkets/styles/sigilMarkets.css */
+
+.sm-countdown{
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 20px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.06);
+}
+
+.sm-countdown-k{
+  font-size: 12px;
+  color: rgba(255,255,255,0.62);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+}
+
+.sm-countdown-v{
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 950;
+  color: rgba(255,255,255,0.90);
+}
+
+.sm-countdown-v.is-soon{
+  color: rgba(255,219,138,0.92);
+}
+/* Add these styles to SigilMarkets/styles/sigilMarkets.css */
+
+.sm-mkt-header{
+  margin-top: 10px;
+}
+
+.sm-mkt-header-top{
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sm-mkt-header-left{
+  min-width: 0;
+  flex: 1;
+}
+
+.sm-mkt-header-q{
+  font-size: 18px;
+  font-weight: 950;
+  letter-spacing: 0.01em;
+  line-height: 1.15;
+}
+
+.sm-mkt-header-sub{
+  margin-top: 6px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.62);
+  letter-spacing: 0.02em;
+}
+
+.sm-mkt-header-desc{
+  margin-top: 10px;
+  font-size: 13px;
+  color: rgba(255,255,255,0.74);
+  line-height: 1.35;
+}
+
+.sm-mkt-header-right{
+  flex: 0 0 auto;
+}
+
+.sm-mkt-header-actions{
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+/* Add these styles to SigilMarkets/styles/sigilMarkets.css */
+
+.sm-chart{
+  border-radius: 22px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.06);
+  overflow: hidden;
+}
+
+.sm-chart-head{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px 0;
+}
+
+.sm-chart-title{
+  font-size: 13px;
+  font-weight: 950;
+  letter-spacing: 0.01em;
+}
+
+.sm-chart-right{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sm-chart-pill{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.05);
+  font-size: 12px;
+  color: rgba(255,255,255,0.80);
+}
+
+.sm-chart-pill.dim{
+  color: rgba(255,255,255,0.56);
+}
+
+.sm-chart-canvas-wrap{
+  padding: 10px 10px 12px;
+}
+
+.sm-chart-canvas{
+  width: 100%;
+  display: block;
+  border-radius: 18px;
+  background: rgba(0,0,0,0.10);
+}
+/* Add these styles to SigilMarkets/styles/sigilMarkets.css */
+
+.sm-order{
+  margin-top: 12px;
+  display: grid;
+  gap: 12px;
+}
+
+.sm-order-top{
+  display: grid;
+  gap: 4px;
+}
+
+.sm-order-title{
+  font-size: 15px;
+  font-weight: 950;
+  letter-spacing: 0.01em;
+}
+
+.sm-order-sub{
+  font-size: 12px;
+  color: rgba(255,255,255,0.66);
+  line-height: 1.35;
+}
+
+.sm-order-cta{
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+}
+/* Add these styles to SigilMarkets/styles/sigilMarkets.css */
+
+.sm-rules-head{
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sm-rules-title{
+  font-size: 13px;
+  font-weight: 950;
+  color: rgba(255,255,255,0.86);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sm-rules-badges{
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.sm-rules-block{
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.sm-rules-k{
+  font-size: 12px;
+  color: rgba(255,255,255,0.62);
+  font-weight: 900;
+  letter-spacing: 0.06em;
+}
+
+.sm-rules-v{
+  font-size: 13px;
+  color: rgba(255,255,255,0.78);
+  line-height: 1.4;
+}
+
+.sm-rules-list{
+  margin: 0;
+  padding-left: 16px;
+  color: rgba(255,255,255,0.78);
+  font-size: 13px;
+  line-height: 1.45;
+}
+/* Add these styles to SigilMarkets/styles/sigilMarkets.css */
+
+.sm-act-head{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sm-act-title{
+  font-size: 13px;
+  font-weight: 950;
+  color: rgba(255,255,255,0.86);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sm-act-list{
+  margin-top: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.sm-act-item{
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: 10px;
+  align-items: start;
+  padding: 10px 10px;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.04);
+}
+
+.sm-act-ico{
+  width: 34px;
+  height: 34px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(0,0,0,0.08);
+  color: rgba(255,255,255,0.78);
+  font-weight: 900;
+}
+
+.sm-act-line{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sm-act-label{
+  font-size: 13px;
+  font-weight: 900;
+  color: rgba(255,255,255,0.86);
+}
+
+.sm-act-pulse{
+  font-size: 12px;
+  color: rgba(255,255,255,0.55);
+}
+
+.sm-act-sub{
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  color: rgba(255,255,255,0.72);
+  font-size: 12px;
+}
+
+.sm-act-side{
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.10);
+  font-weight: 950;
+  letter-spacing: 0.06em;
+}
+
+.sm-act-side.is-yes{
+  border-color: rgba(191,252,255,0.22);
+  background: rgba(191,252,255,0.10);
+  color: rgba(191,252,255,0.92);
+}
+
+.sm-act-side.is-no{
+  border-color: rgba(183,163,255,0.22);
+  background: rgba(183,163,255,0.10);
+  color: rgba(183,163,255,0.92);
+}
+
+.sm-act-mono{
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+/* Add these styles to SigilMarkets/styles/sigilMarkets.css */
+
+.sm-mkt-stack{
+  margin-top: 12px;
+  display: grid;
+  gap: 12px;
+}
+/* Add these styles to SigilMarkets/styles/sigilMarkets.css */
+
+.sm-vault-stack{
+  margin-top: 12px;
+  display: grid;
+  gap: 12px;
+}
+
+.sm-vault-row{
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 720px){
+  .sm-vault-row{ grid-template-columns: 1fr; }
+}
+
+.sm-vault-sigil-top{
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.sm-vault-sigil-title{
+  font-size: 16px;
+  font-weight: 950;
+}
+
+.sm-vault-sigil-sub{
+  margin-top: 4px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.62);
+}
+
+.sm-vault-sigil-badges{
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.sm-vault-sigil-meta{
+  margin-top: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.sm-vault-sigil-line{
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sm-vault-sigil-k{
+  font-size: 12px;
+  color: rgba(255,255,255,0.62);
+}
+
+.sm-vault-sigil-v{
+  font-size: 12px;
+  color: rgba(255,255,255,0.82);
+}
+
+.mono{
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+.sm-vault-bal-head{
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.sm-vault-bal-title{
+  font-size: 13px;
+  font-weight: 950;
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  color: rgba(255,255,255,0.86);
+}
+
+.sm-vault-bal-total{
+  font-size: 13px;
+  font-weight: 950;
+  color: rgba(255,219,138,0.92);
+}
+
+.sm-vault-bal-grid{
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.sm-vault-bal-row{
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sm-vault-bal-row .k{
+  font-size: 12px;
+  color: rgba(255,255,255,0.62);
+}
+
+.sm-vault-bal-row .v{
+  font-size: 12px;
+  font-weight: 900;
+  color: rgba(255,255,255,0.90);
+}
+
+.sm-vault-locks-head{
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.sm-vault-locks-title{
+  font-size: 13px;
+  font-weight: 950;
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  color: rgba(255,255,255,0.86);
+}
+
+.sm-vault-locks-list{
+  margin-top: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.sm-vault-lock{
+  padding: 10px 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.04);
+}
+
+.sm-vault-lock.is-live{
+  border-color: rgba(255,219,138,0.18);
+  background: rgba(255,219,138,0.06);
+}
+
+.sm-vault-lock-top{
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.sm-vault-lock-status{
+  font-size: 11px;
+  font-weight: 950;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.10);
+  color: rgba(255,255,255,0.70);
+}
+
+.sm-vault-lock-status.locked{
+  border-color: rgba(255,219,138,0.22);
+  color: rgba(255,219,138,0.92);
+}
+
+.sm-vault-lock-mid{
+  margin-top: 8px;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.sm-vault-lock-amt{
+  font-weight: 950;
+}
+
+.sm-vault-lock-pulse{
+  font-size: 12px;
+  color: rgba(255,255,255,0.55);
+}
+
+.sm-vault-growth-head{
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.sm-vault-growth-title{
+  font-size: 13px;
+  font-weight: 950;
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  color: rgba(255,255,255,0.86);
+}
+
+.sm-vault-growth-right{
+  color: rgba(183,163,255,0.92);
+  font-weight: 950;
+}
+
+.sm-vault-growth-canvas{
+  margin-top: 10px;
+}
+
+.sm-vault-growth-c{
+  width: 100%;
+  height: 110px;
+  display: block;
+  border-radius: 18px;
+  background: rgba(0,0,0,0.10);
+}
+
+.sm-vault-streak{
+  display: grid;
+  gap: 8px;
+}
+
+.sm-vault-streak-title{
+  font-size: 13px;
+  font-weight: 950;
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  color: rgba(255,255,255,0.86);
+}
+
+.sm-vault-streak-v{
+  font-size: 14px;
+  font-weight: 950;
+  color: rgba(255,255,255,0.90);
+}
+
+.sm-vault-actions{
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+/* Add these styles to SigilMarkets/styles/sigilMarkets.css */
+
+.sm-pos-stack{
+  margin-top: 12px;
+  display: grid;
+  gap: 14px;
+}
+
+.sm-pos-head{
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.sm-pos-title{
+  font-size: 13px;
+  font-weight: 950;
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  color: rgba(255,255,255,0.86);
+}
+
+.sm-pos-list{
+  margin-top: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.sm-pos-card-btn{
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+}
+
+.sm-pos-card-q{
+  font-size: 13px;
+  font-weight: 950;
+  color: rgba(255,255,255,0.90);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.sm-pos-card-top{
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.sm-pos-card-mid{
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.sm-pos-side{
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.10);
+  font-weight: 950;
+  letter-spacing: 0.06em;
+  font-size: 12px;
+}
+
+.sm-pos-side.is-yes{
+  border-color: rgba(191,252,255,0.22);
+  background: rgba(191,252,255,0.10);
+  color: rgba(191,252,255,0.92);
+}
+
+.sm-pos-side.is-no{
+  border-color: rgba(183,163,255,0.22);
+  background: rgba(183,163,255,0.10);
+  color: rgba(183,163,255,0.92);
+}
+
+.sm-pos-mono{
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  color: rgba(255,255,255,0.78);
+}
+
+.sm-pos-detail{
+  margin-top: 12px;
+}
+
+.sm-pos-detail-q{
+  font-size: 16px;
+  font-weight: 950;
+  line-height: 1.2;
+}
+
+.sm-pos-detail-row{
+  margin-top: 10px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.sm-pos-detail-grid{
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.sm-pos-detail-grid .row{
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sm-pos-detail-grid .k{
+  font-size: 12px;
+  color: rgba(255,255,255,0.62);
+}
+
+.sm-pos-detail-grid .v{
+  font-size: 12px;
+  color: rgba(255,255,255,0.90);
+  font-weight: 900;
+}
+
+.sm-pos-detail-actions{
+  margin-top: 10px;
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
 }
 
-.sm-prophecy {
-  display: grid;
-  gap: 16px;
+.sm-pos-timeline{
+  margin-top: 10px;
 }
 
-.sm-prophecy__composer {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: center;
-}
-
-.sm-prophecy__grid {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-}
-
-.sm-prophecy__row {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-}
-
-.sm-prophecy-card__footer {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.8rem;
-  color: rgba(216, 221, 255, 0.6);
-}
-
-.sm-resolution {
-  display: grid;
-  gap: 16px;
-}
-
-.sm-resolution__outcome {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.sm-link {
-  background: none;
-  border: none;
-  color: #7e8bff;
-  cursor: pointer;
-  font-weight: 600;
-}
-
-.sm-dock {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: 18px 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  background: rgba(12, 14, 20, 0.9);
-  backdrop-filter: blur(12px);
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.sm-bottom-nav {
-  display: flex;
-  gap: 12px;
-  justify-content: space-between;
-}
-
-.sm-bottom-nav__item {
-  color: rgba(216, 221, 255, 0.6);
-  text-decoration: none;
-  font-size: 0.85rem;
-}
-
-.sm-bottom-nav__item.active {
-  color: #ffffff;
-}
-
-.sm-floating-action {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.sm-sheet {
-  background: rgba(12, 14, 20, 0.95);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 20px;
-  border-radius: 20px;
-}
-
-.sm-sheet--modal {
-  position: fixed;
-  bottom: 110px;
-  right: 24px;
-  max-width: 320px;
-}
-
-.sm-sheet__actions {
-  display: flex;
+.sm-pos-tl-title{
+  font-size: 13px;
+  font-weight: 950;
+  display: inline-flex;
   gap: 8px;
-  margin-top: 16px;
+  align-items: center;
+  color: rgba(255,255,255,0.86);
 }
 
-.sm-breath-glow {
-  position: absolute;
-  top: -120px;
-  right: -120px;
-  width: 260px;
-  height: 260px;
-  background: radial-gradient(circle, rgba(126, 139, 255, 0.5), transparent 65%);
-  filter: blur(10px);
-  z-index: 0;
+.sm-pos-tl-list{
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
 }
 
-.sm-pulse-spark {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: #7ff0d1;
-  display: inline-block;
+.sm-pos-tl-item{
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.78);
 }
 
-.sm-heat {
-  font-size: 0.85rem;
-  color: #7ff0d1;
+.sm-pos-tl-item .k{
+  color: rgba(255,255,255,0.62);
+}
+/* Add these styles to SigilMarkets/styles/sigilMarkets.css */
+
+.sm-claim{
+  display: grid;
+  gap: 10px;
 }
 
-@keyframes shimmer {
-  0% { background-position: -200px 0; }
-  100% { background-position: 200px 0; }
+.sm-claim-row{
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
 }
 
-@media (max-width: 720px) {
-  .sm-shell {
-    padding: 20px 16px 130px;
-  }
-
-  .sm-topbar {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-}
+.sm-claim-row .k{ color: rgba(255,255,255,0.62); }
+.sm-claim-row .v{ color: rgba(255,255,255,0.90); font-weight: 900; }
