@@ -272,8 +272,6 @@ type LiveKaiButtonProps = {
   breathS: number;
   breathMs: number;
   breathsPerDay: number;
-  balanceLabel: string;
-  balanceUsdLabel: string;
 };
 
 function LiveKaiButton({
@@ -282,8 +280,6 @@ function LiveKaiButton({
   breathS,
   breathMs,
   breathsPerDay,
-  balanceLabel,
-  balanceUsdLabel,
 }: LiveKaiButtonProps): React.JSX.Element {
   const snap = useMemo(() => {
     const pulse = readNum(now, "pulse") ?? 0;
@@ -304,16 +300,6 @@ function LiveKaiButton({
     () => ({
       color: "var(--accent-color)",
       textShadow: "0 0 14px rgba(0, 255, 255, 0.22), 0 0 28px rgba(0, 255, 255, 0.12)",
-    }),
-    [],
-  );
-
-  const neonTextStyleHalf = useMemo<CSSProperties>(
-    () => ({
-      color: "var(--accent-color)",
-      textShadow: "0 0 14px rgba(0, 255, 255, 0.22), 0 0 28px rgba(0, 255, 255, 0.12)",
-      fontSize: "0.5em",
-      lineHeight: 1.05,
     }),
     [],
   );
@@ -361,11 +347,6 @@ function LiveKaiButton({
     return `LIVE. Kai Pulse now ${snap.pulse}. Beat ${snap.beatStepDMY.beat} step ${snap.beatStepDMY.step}. D ${snap.beatStepDMY.day}. M ${snap.beatStepDMY.month}. Y ${snap.beatStepDMY.year}. Open Eternal KaiKlok.`;
   }, [snap]);
 
-  const balanceText =
-    balanceLabel === "—" && balanceUsdLabel === "—"
-      ? "Φ — • USD —"
-      : `${balanceLabel} • USD ${balanceUsdLabel === "—" ? "—" : balanceUsdLabel}`;
-
   return (
     <button
       type="button"
@@ -392,13 +373,17 @@ function LiveKaiButton({
             </div>
           </div>
 
-          <div className="live-line live-line--balance">
-            <span className="live-balance-icon" aria-hidden="true">
-              <Icon name="user" size={12} tone="dim" />
-            </span>
-            <span className="live-balance-text mono" style={neonTextStyleHalf}>
-              {balanceText}
-            </span>
+          <div className="live-line live-line--kai">
+            <span className="kai-num kai-num--ark mono">{snap.beatStepLabel}</span>
+            <span className="kai-sep">•</span>
+            <span className="kai-tag mono">D</span>
+            <span className="kai-num kai-num--chakra mono">{snap.beatStepDMY.day}</span>
+            <span className="kai-sep">/</span>
+            <span className="kai-tag mono">M</span>
+            <span className="kai-num kai-num--month mono">{snap.beatStepDMY.month}</span>
+            <span className="kai-sep">/</span>
+            <span className="kai-tag mono">Y</span>
+            <span className="kai-num mono">{snap.beatStepDMY.year}</span>
           </div>
         </div>
       </div>
@@ -476,6 +461,25 @@ export const TopBar = (props: TopBarProps) => {
           </div>
 
           <div className="sm-topbar-right">
+            <div className="sm-topbar-glyph" aria-label="Glyph balance">
+              <div className="sm-topbar-glyph-title">
+                <span className="sm-topbar-glyph-dot" aria-hidden="true" />
+                Glyph
+              </div>
+              <div className="sm-topbar-glyph-values">
+                <span className="sm-topbar-glyph-phi">
+                  {activeVault ? glyphBalance.availableLabel : "Φ —"}
+                </span>
+                <span className="sm-topbar-glyph-usd">
+                  {activeVault
+                    ? glyphBalance.availableUsdLabel === "—"
+                      ? "USD —"
+                      : `USD ${glyphBalance.availableUsdLabel}`
+                    : "USD —"}
+                </span>
+              </div>
+            </div>
+
             <Chip
               size="sm"
               selected={false}
@@ -496,8 +500,6 @@ export const TopBar = (props: TopBarProps) => {
               breathS={BREATH_S}
               breathMs={BREATH_MS}
               breathsPerDay={BREATHS_PER_DAY}
-              balanceLabel={activeVault ? glyphBalance.availableLabel : "—"}
-              balanceUsdLabel={activeVault ? glyphBalance.availableUsdLabel : "—"}
             />
 
             {props.right}

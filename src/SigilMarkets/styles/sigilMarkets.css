@@ -1195,6 +1195,12 @@ body{
   opacity: 0.92;
 }
 
+.live-line--kai{
+  font-size: clamp(9px, 1.8vw, 11px);
+  opacity: 0.9;
+  letter-spacing: 0.04em;
+}
+
 .live-balance-icon{
   display: inline-flex;
   align-items: center;
