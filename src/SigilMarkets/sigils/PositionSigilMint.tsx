@@ -207,6 +207,46 @@ const formatUsd2 = (usd: number): string => {
   return usd.toFixed(2);
 };
 
+const readFiniteNumber = (v: unknown): number | undefined =>
+  typeof v === "number" && Number.isFinite(v) ? v : undefined;
+
+const readMarketRateFromRecord = (
+  source: UnknownRecord | null | undefined,
+): Readonly<{ marketPhi?: number; marketUsd?: number }> => {
+  if (!source) return {};
+  const marketPhi = readFiniteNumber(source["marketPhi"]);
+  const marketUsd = readFiniteNumber(source["marketUsd"]);
+  if (marketPhi != null && marketUsd != null) return { marketPhi, marketUsd };
+
+  const usdPerPhi = readFiniteNumber(source["usdPerPhi"]);
+  if (usdPerPhi != null && usdPerPhi > 0) return { marketPhi: 1, marketUsd: usdPerPhi };
+
+  const phiPerUsd = readFiniteNumber(source["phiPerUsd"]);
+  if (phiPerUsd != null && phiPerUsd > 0) return { marketPhi: phiPerUsd, marketUsd: 1 };
+
+  return {};
+};
+
+const pickMarketRate = (
+  sources: ReadonlyArray<UnknownRecord | null | undefined>,
+): Readonly<{ marketPhi?: number; marketUsd?: number }> => {
+  for (const source of sources) {
+    const rate = readMarketRateFromRecord(source);
+    if (rate.marketPhi != null && rate.marketUsd != null) return rate;
+  }
+  return {};
+};
+
+const readMarketRateFromPosition = (
+  pos?: PositionRecord,
+): Readonly<{ marketPhi?: number; marketUsd?: number }> => {
+  if (!pos) return {};
+  const entry = pos.entry as unknown as UnknownRecord;
+  const quote = isRecord(entry["quote"]) ? (entry["quote"] as UnknownRecord) : undefined;
+
+  return pickMarketRate([quote, entry, pos as unknown as UnknownRecord]);
+};
+
 
 
 /* ─────────────────────────────────────────────────────────────
@@ -831,63 +871,55 @@ const buildSvg = async (
   const toneGhost = payload.side === "YES" ? "rgba(185,252,255,0.10)" : "rgba(190,170,255,0.10)";
 
   // Real valuation (STRICT)
-// Value math (REAL, deterministic)
-// stakePhiDec6 already computed from lockedStakeMicro
-const stakePhiDec6 = microDecToPhiDec6(String(payload.lockedStakeMicro));
-const stakePhiNum = phiDec6ToNumber(stakePhiDec6);
+  // Value math (REAL, deterministic)
+  // stakePhiDec6 already computed from lockedStakeMicro
+  const stakePhiDec6 = microDecToPhiDec6(String(payload.lockedStakeMicro));
+  const stakePhiNum = phiDec6ToNumber(stakePhiDec6);
 
-// Minimal meta for issuance surface (deterministic, no placeholders)
-const mintPulse = payload.openedAt.pulse;
-const issuanceMeta: SigilMetadataLite = {
-  kaiPulse: mintPulse,
-  pulse: mintPulse,
-  beat: payload.openedAt.beat,
-  stepIndex: payload.openedAt.stepIndex,
-  stepsPerBeat: 44,
-  seriesSize: 1,
-  quality: "med",
-  creatorVerified: true,
-  creatorRep: 0.5,
-};
+  // Minimal meta for issuance surface (deterministic, no placeholders)
+  const mintPulse = payload.openedAt.pulse;
+  const issuanceMeta: SigilMetadataLite = {
+    kaiPulse: mintPulse,
+    pulse: mintPulse,
+    beat: payload.openedAt.beat,
+    stepIndex: payload.openedAt.stepIndex,
+    stepsPerBeat: 44,
+    seriesSize: 1,
+    quality: "med",
+    creatorVerified: true,
+    creatorRep: 0.5,
+  };
 
-// If you have marketPhi + marketUsd available on pos/entry, pass them here.
-// Otherwise issuance will compute deterministically.
-const marketPhi =
-  pos && (pos as unknown as Record<string, unknown>)["marketPhi"] != null
-    ? Number((pos as unknown as Record<string, unknown>)["marketPhi"])
-    : undefined;
+  // Prefer real market rates from entry.quote / entry / position metadata.
+  // Otherwise issuance will compute deterministically.
+  const { marketPhi, marketUsd } = readMarketRateFromPosition(pos);
 
-const marketUsd =
-  pos && (pos as unknown as Record<string, unknown>)["marketUsd"] != null
-    ? Number((pos as unknown as Record<string, unknown>)["marketUsd"])
-    : undefined;
+  const rate = usdPerPhiAtMint({
+    nowPulse: mintPulse,
+    meta: issuanceMeta,
+    marketPhi,
+    marketUsd,
+  });
 
-const rate = usdPerPhiAtMint({
-  nowPulse: mintPulse,
-  meta: issuanceMeta,
-  marketPhi,
-  marketUsd,
-});
-
-const stakeUsdNum = usdValueFromPhi(stakePhiNum, rate.usdPerPhi);
-const stakeUsd2 = formatUsd2(stakeUsdNum);
+  const stakeUsdNum = usdValueFromPhi(stakePhiNum, rate.usdPerPhi);
+  const stakeUsd2 = formatUsd2(stakeUsdNum);
 
 
   // Embed φ logo from public/phi.svg
   const phiLogoUrl = await getPhiLogoDataUrlAsync();
 
   // Machine metadata
-const payloadForMeta: Record<string, unknown> = { ...(payload as unknown as Record<string, unknown>) };
-payloadForMeta["canonicalHash"] = seal.canonicalHashHex;     // compatibility for your verifier
-payloadForMeta["canonicalHashHex"] = seal.canonicalHashHex;
-payloadForMeta["zkOk"] = seal.zkOk;
-payloadForMeta["zkPoseidonHashDec"] = seal.zkPoseidonHashDec;
-payloadForMeta["usdPerPhi"] = rate.usdPerPhi;
-payloadForMeta["phiPerUsd"] = rate.phiPerUsd;
-payloadForMeta["usdSource"] = rate.source;
-payloadForMeta["wagerUsd"] = stakeUsd2;
+  const payloadForMeta: Record<string, unknown> = { ...(payload as unknown as Record<string, unknown>) };
+  payloadForMeta["canonicalHash"] = seal.canonicalHashHex; // compatibility for your verifier
+  payloadForMeta["canonicalHashHex"] = seal.canonicalHashHex;
+  payloadForMeta["zkOk"] = seal.zkOk;
+  payloadForMeta["zkPoseidonHashDec"] = seal.zkPoseidonHashDec;
+  payloadForMeta["usdPerPhi"] = rate.usdPerPhi;
+  payloadForMeta["phiPerUsd"] = rate.phiPerUsd;
+  payloadForMeta["usdSource"] = rate.source;
+  payloadForMeta["wagerUsd"] = stakeUsd2;
 
-const payloadJsonRaw = JSON.stringify(payloadForMeta);
+  const payloadJsonRaw = JSON.stringify(payloadForMeta);
 
   const sealJsonRaw = JSON.stringify(seal);
 
