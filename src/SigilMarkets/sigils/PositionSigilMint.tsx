@@ -968,7 +968,9 @@ const buildSvg = async (
 
   const digitCount = whole.length + 1 + frac.length;
   const approxWidth = digitCount * 28;
-  const iconX = 500 - approxWidth / 2 - 38;
+  const amountCenterX = 512;
+  const decimalTighten = -10;
+  const iconX = amountCenterX - approxWidth / 2 - 32;
 
   // Center ring microtext (official feel)
   const microSeal = `ΦNET • ${okWord} • ${seal.scheme} • ${openedShort} • ${String(payload.marketId)} •`;
@@ -1262,7 +1264,7 @@ const buildSvg = async (
     <g filter="url(#amountGlow)">
       <!-- back glow copy -->
       <text
-        x="500"
+        x="${amountCenterX}"
         y="498"
         text-anchor="middle"
         dominant-baseline="middle"
@@ -1272,12 +1274,12 @@ const buildSvg = async (
         style="paint-order: stroke; stroke: rgba(0,0,0,0.85); stroke-width: 5.0; font-variant-numeric: tabular-nums; font-feature-settings: 'tnum';"
       >
         <tspan font-size="96">${esc(whole)}</tspan>
-        <tspan font-size="58">.${esc(frac)}</tspan>
+        <tspan font-size="58" dx="${decimalTighten}">.${esc(frac)}</tspan>
       </text>
 
       <!-- main face -->
       <text
-        x="500"
+        x="${amountCenterX}"
         y="494"
         text-anchor="middle"
         dominant-baseline="middle"
@@ -1287,12 +1289,12 @@ const buildSvg = async (
         style="paint-order: stroke; stroke: rgba(0,0,0,0.78); stroke-width: 2.6; font-variant-numeric: tabular-nums; font-feature-settings: 'tnum';"
       >
         <tspan font-size="96">${esc(whole)}</tspan>
-        <tspan font-size="58">.${esc(frac)}</tspan>
+        <tspan font-size="58" dx="${decimalTighten}">.${esc(frac)}</tspan>
       </text>
 
       <!-- highlight stroke -->
       <text
-        x="500"
+        x="${amountCenterX}"
         y="492"
         text-anchor="middle"
         dominant-baseline="middle"
@@ -1302,7 +1304,7 @@ const buildSvg = async (
         style="paint-order: stroke; stroke: rgba(255,255,255,0.35); stroke-width: 1.2; font-variant-numeric: tabular-nums; font-feature-settings: 'tnum';"
       >
         <tspan font-size="96">${esc(whole)}</tspan>
-        <tspan font-size="58">.${esc(frac)}</tspan>
+        <tspan font-size="58" dx="${decimalTighten}">.${esc(frac)}</tspan>
       </text>
     </g>
 
