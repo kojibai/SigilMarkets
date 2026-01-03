@@ -1,7 +1,4 @@
-// SigilMarkets/state/vaultStore.tsx
 "use client";
-
-/* eslint-disable @typescript-eslint/consistent-type-definitions */
 
 /**
  * SigilMarkets — vaultStore
@@ -41,11 +38,13 @@ import type { KaiMoment, KaiPulse, LockId, PhiMicro, VaultId } from "../types/ma
 import { asVaultId } from "../types/marketTypes";
 
 import {
+  asCanonicalHash,
   asIdentitySigilId,
   asKaiSignature,
   asMicroDecimalString,
   asSvgHash,
   asUserPhiKey,
+  type CanonicalHash,
   type IdentitySigilId,
   type KaiSignature,
   type MicroDecimalString,
@@ -111,7 +110,7 @@ const sortVaultIds = (byId: Readonly<Record<string, VaultRecord>>): VaultId[] =>
   return arr.map((x) => asVaultId(x.id));
 };
 
-const vaultKey = (id: VaultId): string => id as unknown as string;
+const vaultKey = (id: VaultId): string => String(id);
 
 /** ------------------------------
  * Cache shapes
@@ -161,7 +160,14 @@ const decodeSerializedVaultRecord: Decoder<SerializedVaultRecord> = (v: unknown)
       const updatedPulse = item["updatedPulse"];
 
       if (!isString(lockId) || lockId.length === 0) continue;
-      if (lStatus !== "locked" && lStatus !== "released" && lStatus !== "burned" && lStatus !== "paid" && lStatus !== "refunded") continue;
+      if (
+        lStatus !== "locked" &&
+        lStatus !== "released" &&
+        lStatus !== "burned" &&
+        lStatus !== "paid" &&
+        lStatus !== "refunded"
+      )
+        continue;
       if (!isString(reason) || reason.length === 0) continue;
       if (amount === null) continue;
       if (!isRecord(createdAt)) continue;
@@ -191,10 +197,14 @@ const decodeSerializedVaultRecord: Decoder<SerializedVaultRecord> = (v: unknown)
   const identitySigil =
     isRecord(identitySigilRaw) && isString(identitySigilRaw["svgHash"])
       ? {
-          sigilId: isString(identitySigilRaw["sigilId"]) ? asIdentitySigilId(identitySigilRaw["sigilId"]) : undefined,
+          sigilId: isString(identitySigilRaw["sigilId"])
+            ? asIdentitySigilId(identitySigilRaw["sigilId"])
+            : undefined,
           svgHash: asSvgHash(identitySigilRaw["svgHash"]),
           url: isString(identitySigilRaw["url"]) ? identitySigilRaw["url"] : undefined,
-          canonicalHash: isString(identitySigilRaw["canonicalHash"]) ? identitySigilRaw["canonicalHash"] : undefined,
+          canonicalHash: isString(identitySigilRaw["canonicalHash"])
+            ? asCanonicalHash(identitySigilRaw["canonicalHash"].toLowerCase())
+            : undefined,
           valuePhiMicro: (() => {
             const parsed = parseBigIntDec(identitySigilRaw["valuePhiMicro"]);
             return parsed === null ? undefined : biToDec(parsed);
@@ -203,11 +213,15 @@ const decodeSerializedVaultRecord: Decoder<SerializedVaultRecord> = (v: unknown)
             const parsed = parseBigIntDec(identitySigilRaw["availablePhiMicro"]);
             return parsed === null ? undefined : biToDec(parsed);
           })(),
-          lastValuedPulse: isNumber(identitySigilRaw["lastValuedPulse"]) ? Math.max(0, Math.floor(identitySigilRaw["lastValuedPulse"])) : undefined,
+          lastValuedPulse: isNumber(identitySigilRaw["lastValuedPulse"])
+            ? Math.max(0, Math.floor(identitySigilRaw["lastValuedPulse"]))
+            : undefined,
         }
       : undefined;
 
-  const zkProofRef = isString(ownerRaw["zkProofRef"]) ? (ownerRaw["zkProofRef"] as unknown as ZkProofRef) : undefined;
+  const zkProofRef = isString(ownerRaw["zkProofRef"])
+    ? (ownerRaw["zkProofRef"] as unknown as ZkProofRef)
+    : undefined;
 
   const statsRaw = v["stats"];
   const stats =
@@ -332,10 +346,8 @@ const serializeVaultRecord = (v: VaultRecord): SerializedVaultRecord => {
             svgHash: v.owner.identitySigil.svgHash,
             url: v.owner.identitySigil.url,
             canonicalHash: v.owner.identitySigil.canonicalHash,
-            valuePhiMicro:
-              v.owner.identitySigil.valuePhiMicro !== undefined ? biToDec(v.owner.identitySigil.valuePhiMicro) : undefined,
-            availablePhiMicro:
-              v.owner.identitySigil.availablePhiMicro !== undefined ? biToDec(v.owner.identitySigil.availablePhiMicro) : undefined,
+            valuePhiMicro: v.owner.identitySigil.valuePhiMicro !== undefined ? biToDec(v.owner.identitySigil.valuePhiMicro) : undefined,
+            availablePhiMicro: v.owner.identitySigil.availablePhiMicro !== undefined ? biToDec(v.owner.identitySigil.availablePhiMicro) : undefined,
             lastValuedPulse: v.owner.identitySigil.lastValuedPulse,
           }
         : undefined,
@@ -455,7 +467,7 @@ export type CreateOrActivateVaultInput = Readonly<{
       sigilId?: IdentitySigilId;
       svgHash: SvgHash;
       url?: string;
-      canonicalHash?: string;
+      canonicalHash?: CanonicalHash;
       valuePhiMicro?: PhiMicro;
       availablePhiMicro?: PhiMicro;
       lastValuedPulse?: KaiPulse;
@@ -536,7 +548,6 @@ export const SigilMarketsVaultProvider = (props: Readonly<{ children: ReactNode 
   const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastPersistMsRef = useRef<number>(0);
 
-  // cleanup pending timers
   useEffect(() => {
     return () => {
       if (persistTimer.current) clearTimeout(persistTimer.current);
@@ -647,7 +658,8 @@ export const SigilMarketsVaultProvider = (props: Readonly<{ children: ReactNode 
                   valuePhiMicro: input.owner.identitySigil.valuePhiMicro ?? existing.owner.identitySigil?.valuePhiMicro,
                   availablePhiMicro:
                     input.owner.identitySigil.availablePhiMicro ?? existing.owner.identitySigil?.availablePhiMicro,
-                  lastValuedPulse: input.owner.identitySigil.lastValuedPulse ?? existing.owner.identitySigil?.lastValuedPulse,
+                  lastValuedPulse:
+                    input.owner.identitySigil.lastValuedPulse ?? existing.owner.identitySigil?.lastValuedPulse,
                 }
               : existing.owner.identitySigil;
 
@@ -661,7 +673,9 @@ export const SigilMarketsVaultProvider = (props: Readonly<{ children: ReactNode 
 
             const updated = nextOwner === existing.owner ? existing : { ...existing, owner: nextOwner };
             created = updated;
+
             const ids = prev.ids.includes(input.vaultId) ? prev.ids : [input.vaultId, ...prev.ids];
+
             return {
               ...prev,
               byId: updated === existing ? prev.byId : { ...prev.byId, [key]: updated },
@@ -730,7 +744,7 @@ export const SigilMarketsVaultProvider = (props: Readonly<{ children: ReactNode 
       return (
         created ?? {
           vaultId: input.vaultId,
-          owner: input.owner,
+          owner: input.owner as unknown as VaultRecord["owner"],
           status: "active",
           spendableMicro: normalizePhi(input.initialSpendableMicro ?? 0n),
           lockedMicro: 0n as PhiMicro,
@@ -769,6 +783,7 @@ export const SigilMarketsVaultProvider = (props: Readonly<{ children: ReactNode 
           }
 
           let nextIdentitySigil = v.owner.identitySigil;
+
           if (req.kind === "deposit") {
             const identity = v.owner.identitySigil;
             const available = identity?.availablePhiMicro;
@@ -1006,6 +1021,7 @@ export const SigilMarketsVaultProvider = (props: Readonly<{ children: ReactNode 
             err = "vault not found";
             return prev;
           }
+
           const s = v.stats ?? {
             winStreak: 0,
             lossStreak: 0,

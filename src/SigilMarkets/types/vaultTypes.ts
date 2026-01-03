@@ -1,4 +1,3 @@
-// SigilMarkets/types/vaultTypes.ts
 /* eslint-disable @typescript-eslint/consistent-type-definitions */
 
 /**
@@ -9,19 +8,25 @@
  * - We derive a VaultId deterministically from identity artifacts elsewhere.
  * - The vault holds spendable Φ and locks Φ into escrow for open positions.
  *
- * All values are stored as integer microΦ (bigint).
- * JSON serialization uses decimal strings (no bigint in JSON).
+ * Storage:
+ * - Runtime uses bigint microΦ (PhiMicro = bigint).
+ * - JSON uses decimal strings (MicroDecimalString).
+ *
+ * IdentitySigilRef:
+ * - Stores identity artifact refs + optional valuation snapshot for local UX.
+ * - canonicalHash is the preferred stable key (canonicalized payload hash).
+ * - svgHash is the artifact hash fallback.
  */
 
-import type {
-  Brand,
-  KaiMoment,
-  KaiPulse,
-  LockId,
-  MicroDecimalString,
-  PhiMicro,
-  VaultId,
-} from "./marketTypes";
+import { asMicroDecimalString } from "./marketTypes";
+import type { Brand, KaiMoment, KaiPulse, LockId, MicroDecimalString, PhiMicro, VaultId } from "./marketTypes";
+
+/**
+ * Re-export MicroDecimalString utilities for convenience so other modules
+ * can import from vaultTypes without reaching into marketTypes directly.
+ */
+export type { MicroDecimalString } from "./marketTypes";
+export { asMicroDecimalString } from "./marketTypes";
 
 /** Hash of an SVG payload (sha256 hex string, etc.). */
 export type SvgHash = Brand<string, "SvgHash">;
@@ -42,6 +47,24 @@ export const asZkProofRef = (v: string): ZkProofRef => v as ZkProofRef;
 /** A stable identifier for a specific identity sigil artifact. */
 export type IdentitySigilId = Brand<string, "IdentitySigilId">;
 export const asIdentitySigilId = (v: string): IdentitySigilId => v as IdentitySigilId;
+
+/**
+ * Preferred stable hash for identity payload canonicalization.
+ * This is the primary key for registries/movement keys.
+ */
+export type CanonicalHash = Brand<string, "CanonicalHash">;
+export const asCanonicalHash = (v: string): CanonicalHash => v as CanonicalHash;
+
+/** Normalize canonical hash (lowercase) while preserving the brand. */
+export const normCanonicalHash = (v: string): CanonicalHash => asCanonicalHash(v.trim().toLowerCase());
+
+/** Optional valuation provenance tag (for future-proofing). */
+export type ValuationSource =
+  | "intrinsic"
+  | "proofbundle"
+  | "verifier"
+  | "manual"
+  | (string & { readonly __valuationSource?: "custom" });
 
 export type VaultStatus = "active" | "frozen";
 export const isVaultStatus = (v: unknown): v is VaultStatus => v === "active" || v === "frozen";
@@ -92,6 +115,39 @@ export type VaultLock = Readonly<{
 }>;
 
 /**
+ * Identity sigil info stored on vault owner for UI + rehydration.
+ *
+ * Important invariants (when valuation fields exist):
+ * - If valuePhiMicro is set, it is the max value the glyph was valued at (microΦ).
+ * - availablePhiMicro is the remaining spendable glyph value (microΦ) after deposits.
+ * - If both exist: 0 <= availablePhiMicro <= valuePhiMicro.
+ * - lastValuedPulse is the pulse when valuePhiMicro/availablePhiMicro were computed.
+ */
+export type IdentitySigilRef = Readonly<{
+  sigilId?: IdentitySigilId;
+  svgHash: SvgHash;
+  url?: string;
+
+  /**
+   * Preferred stable identifier (canonicalized payload hash, lowercase hex).
+   * If present, use this instead of svgHash for registries/movement keys.
+   */
+  canonicalHash?: CanonicalHash;
+
+  /** Optional valuation snapshot (microΦ). */
+  valuePhiMicro?: PhiMicro;
+
+  /** Optional remaining spendable value on the glyph (microΦ). */
+  availablePhiMicro?: PhiMicro;
+
+  /** Pulse when the valuation was last computed/updated. */
+  lastValuedPulse?: KaiPulse;
+
+  /** Optional provenance label for the valuation (future-proof). */
+  valuationSource?: ValuationSource;
+}>;
+
+/**
  * Deterministic internal vault record.
  * - spendable: can be used for new wagers
  * - locked: sum of locks in status=locked (escrowed)
@@ -109,15 +165,7 @@ export type VaultRecord = Readonly<{
     zkProofRef?: ZkProofRef;
 
     /** Identity sigil info (for UI & rehydration). */
-    identitySigil?: Readonly<{
-      sigilId?: IdentitySigilId;
-      svgHash: SvgHash;
-      url?: string;
-      canonicalHash?: string;
-      valuePhiMicro?: PhiMicro;
-      availablePhiMicro?: PhiMicro;
-      lastValuedPulse?: KaiPulse;
-    }>;
+    identitySigil?: IdentitySigilRef;
   }>;
 
   status: VaultStatus;
@@ -146,6 +194,19 @@ export type VaultRecord = Readonly<{
   updatedPulse: KaiPulse;
 }>;
 
+/** JSON-serializable identity sigil ref (microΦ bigint -> decimal strings). */
+export type SerializedIdentitySigilRef = Readonly<{
+  sigilId?: IdentitySigilId;
+  svgHash: SvgHash;
+  url?: string;
+  canonicalHash?: CanonicalHash;
+
+  valuePhiMicro?: MicroDecimalString;
+  availablePhiMicro?: MicroDecimalString;
+  lastValuedPulse?: KaiPulse;
+  valuationSource?: ValuationSource;
+}>;
+
 /**
  * JSON-serializable form of VaultRecord (microΦ bigint -> decimal strings).
  */
@@ -157,15 +218,7 @@ export type SerializedVaultRecord = Readonly<{
     kaiSignature: KaiSignature;
     zkProofRef?: ZkProofRef;
 
-    identitySigil?: Readonly<{
-      sigilId?: IdentitySigilId;
-      svgHash: SvgHash;
-      url?: string;
-      canonicalHash?: string;
-      valuePhiMicro?: MicroDecimalString;
-      availablePhiMicro?: MicroDecimalString;
-      lastValuedPulse?: KaiPulse;
-    }>;
+    identitySigil?: SerializedIdentitySigilRef;
   }>;
 
   status: VaultStatus;
@@ -183,7 +236,7 @@ export type SerializedVaultRecord = Readonly<{
     marketId?: string;
     positionId?: string;
     note?: string;
-  }>;
+  }>[];
 
   stats?: Readonly<{
     winStreak: number;
@@ -256,7 +309,10 @@ export type VaultSigilPayloadV1 = Readonly<{
   /** Kai moment the snapshot was minted. */
   mintedAt: KaiMoment;
 
-  /** Identity sigil hash used to bind this vault. */
+  /**
+   * Identity sigil hash used to bind this vault.
+   * Prefer canonicalHash when available; otherwise fall back to svgHash.
+   */
   identitySvgHash: SvgHash;
 
   /** Optional UI labels. */
@@ -283,21 +339,11 @@ export type VaultSnapshot = Readonly<{
 export const isUserPhiKey = (v: unknown): v is UserPhiKey => typeof v === "string" && v.length > 0;
 export const isKaiSignature = (v: unknown): v is KaiSignature => typeof v === "string" && v.length > 0;
 export const isSvgHash = (v: unknown): v is SvgHash => typeof v === "string" && v.length > 0;
-// vaultTypes.ts
+export const isCanonicalHash = (v: unknown): v is CanonicalHash =>
+  typeof v === "string" && v.length > 0 && /^[0-9a-f]+$/i.test(v);
 
-// If you already have this type, make sure it's exported (not just `type ...`)
-export type MicroDecimalString = string & {
-  readonly __brand: "MicroDecimalString";
-};
-
-// Add this if missing, or export it if it already exists
-export const asMicroDecimalString = (v: string): MicroDecimalString => {
-  const s = v.trim();
-
-  // non-negative integer decimal string, canonical (no leading zeros except "0")
-  if (!/^(0|[1-9]\d*)$/.test(s)) {
-    throw new Error(`invalid MicroDecimalString: ${v}`);
-  }
-
-  return s as MicroDecimalString;
-};
+/**
+ * Bigint → canonical MicroDecimalString helper (non-negative).
+ * (Exported because stores/serializers frequently need it.)
+ */
+export const biDec = (v: bigint): MicroDecimalString => asMicroDecimalString(v < 0n ? "0" : v.toString(10));
