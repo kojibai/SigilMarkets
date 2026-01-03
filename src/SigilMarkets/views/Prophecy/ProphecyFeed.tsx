@@ -1,7 +1,7 @@
 // SigilMarkets/views/Prophecy/ProphecyFeed.tsx
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import type { KaiMoment, MarketId } from "../../types/marketTypes";
 import { useSigilMarketsUi } from "../../state/uiStore";
 import { useScrollRestoration } from "../../hooks/useScrollRestoration";
@@ -12,6 +12,13 @@ import { TopBar } from "../../ui/chrome/TopBar";
 import { Card, CardContent } from "../../ui/atoms/Card";
 import { Chip } from "../../ui/atoms/Chip";
 import { Icon } from "../../ui/atoms/Icon";
+import {
+  CheckRingIcon,
+  LockedIcon,
+  MissedRingIcon,
+  SubtitleMetric,
+  UniverseIcon,
+} from "../../ui/atoms/SubtitleMetrics";
 
 import { ProphecyCard } from "./ProphecyCard";
 import { SealPredictionSheet } from "./SealPredictionSheet";
@@ -53,13 +60,47 @@ export const ProphecyFeed = (props: ProphecyFeedProps) => {
     includeResolved: true,
   });
 
-  const subtitle = useMemo(() => {
-    const parts: string[] = [];
-    parts.push(`${counts.total} total`);
-    if (counts.sealed > 0) parts.push(`${counts.sealed} sealed`);
-    if (counts.fulfilled > 0) parts.push(`${counts.fulfilled} fulfilled`);
-    if (counts.missed > 0) parts.push(`${counts.missed} missed`);
-    return parts.join(" • ");
+  const subtitle = useMemo<ReactNode>(() => {
+    const items = [
+      {
+        key: "total",
+        label: "Total prophecies",
+        value: counts.total,
+        icon: <UniverseIcon />,
+      },
+      counts.sealed > 0
+        ? {
+            key: "sealed",
+            label: "Sealed prophecies",
+            value: counts.sealed,
+            icon: <LockedIcon />,
+          }
+        : null,
+      counts.fulfilled > 0
+        ? {
+            key: "fulfilled",
+            label: "Fulfilled prophecies",
+            value: counts.fulfilled,
+            icon: <CheckRingIcon />,
+          }
+        : null,
+      counts.missed > 0
+        ? {
+            key: "missed",
+            label: "Missed prophecies",
+            value: counts.missed,
+            icon: <MissedRingIcon />,
+          }
+        : null,
+    ].filter((item): item is NonNullable<(typeof items)[number]> => item !== null);
+
+    return (
+      <span className="sm-subtitle-metrics">
+        {items.map((item) => (
+          <SubtitleMetric key={item.key} icon={item.icon} value={item.value} label={item.label} />
+        ))}
+      </span>
+    );
   }, [counts.fulfilled, counts.missed, counts.sealed, counts.total]);
 
   return (

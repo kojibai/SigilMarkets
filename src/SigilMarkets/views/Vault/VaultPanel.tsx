@@ -1,7 +1,7 @@
 // SigilMarkets/views/Vault/VaultPanel.tsx
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { KaiMoment, VaultId } from "../../types/marketTypes";
 import { useSigilMarketsUi } from "../../state/uiStore";
 import { useScrollRestoration } from "../../hooks/useScrollRestoration";
@@ -13,6 +13,7 @@ import { Card, CardContent } from "../../ui/atoms/Card";
 import { Button } from "../../ui/atoms/Button";
 import { Divider } from "../../ui/atoms/Divider";
 import { Icon } from "../../ui/atoms/Icon";
+import { ChainIcon, LockedIcon, PulseIcon, SubtitleMetric, UnlockedIcon } from "../../ui/atoms/SubtitleMetrics";
 
 import { VaultSigilCard } from "./VaultSigilCard";
 import { VaultBalance } from "./VaultBalance";
@@ -55,7 +56,7 @@ export const VaultPanel = (props: VaultPanelProps) => {
     return lastPulse;
   }, [locks]);
 
-  const subtitle = useMemo(() => {
+  const subtitle = useMemo<ReactNode>(() => {
     if (!vault) {
       return status === "ready" ? "Inhale a glyph to activate" : "Loading vault…";
     }
@@ -63,9 +64,43 @@ export const VaultPanel = (props: VaultPanelProps) => {
     const maxDecimals = isCompactAmount ? 2 : 4;
     const spend = formatPhiMicro(spendableMicro, { withUnit: true, maxDecimals, trimZeros: true });
     const locked = formatPhiMicro(lockedMicro, { withUnit: true, maxDecimals, trimZeros: true });
-    const tail = lastLockPulse > 0 ? ` • last lock p${lastLockPulse}` : "";
 
-    return `spendable ${spend} • locked ${locked} • locks ${lockedCount}${tail}`;
+    const items = [
+      {
+        key: "spendable",
+        label: "Spendable Φ",
+        value: spend,
+        icon: <UnlockedIcon />,
+      },
+      {
+        key: "locked",
+        label: "Locked Φ",
+        value: locked,
+        icon: <LockedIcon />,
+      },
+      {
+        key: "locks",
+        label: "Active locks",
+        value: lockedCount,
+        icon: <ChainIcon />,
+      },
+      lastLockPulse > 0
+        ? {
+            key: "last-lock",
+            label: "Last lock pulse",
+            value: `p${lastLockPulse}`,
+            icon: <PulseIcon />,
+          }
+        : null,
+    ].filter((item): item is NonNullable<(typeof items)[number]> => item !== null);
+
+    return (
+      <span className="sm-subtitle-metrics">
+        {items.map((item) => (
+          <SubtitleMetric key={item.key} icon={item.icon} value={item.value} label={item.label} />
+        ))}
+      </span>
+    );
   }, [vault, status, spendableMicro, lockedMicro, lockedCount, lastLockPulse, isCompactAmount]);
 
   useEffect(() => {

@@ -22,8 +22,8 @@ type ScrollMode = "window" | "container";
 
 export type TopBarProps = Readonly<{
   title: string;
-  subtitle?: string;
-  rightSubtitle?: string;
+  subtitle?: React.ReactNode;
+  rightSubtitle?: React.ReactNode;
   now: KaiMoment;
   scrollMode: ScrollMode;
   scrollRef: React.RefObject<HTMLDivElement | null> | null;

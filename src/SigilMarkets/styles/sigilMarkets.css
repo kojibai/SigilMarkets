@@ -964,6 +964,28 @@ body{
   text-overflow: ellipsis;
 }
 
+.sm-subtitle-metrics{
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sm-subtitle-metric{
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sm-subtitle-icon{
+  display: inline-flex;
+  align-items: center;
+  color: rgba(255,255,255,0.75);
+}
+
+.sm-subtitle-value{
+  font-variant-numeric: tabular-nums;
+}
+
 .sm-topbar-sub--seal{
   display: none;
   text-align: center;
