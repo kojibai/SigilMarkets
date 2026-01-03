@@ -1,18 +1,39 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
-import sigilProofHandler from './api/proof/sigil.js';
+async function loadSigilProofHandler() {
+  const mod = await import('./api/proof/sigil.js');
+  return mod.default;
+}
 
 function sigilProofApi() {
-  const handler = async (req: Parameters<typeof sigilProofHandler>[0], res: Parameters<typeof sigilProofHandler>[1]) => {
-    if ((req.method ?? 'GET').toUpperCase() !== 'POST') {
-      res.statusCode = 405;
-      res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ error: 'Method not allowed' }));
+  const handler = async (req: unknown, res: unknown, next: () => void) => {
+    const reqAny = req as { method?: string };
+    const resAny = res as {
+      statusCode?: number;
+      setHeader: (name: string, value: string) => void;
+      end: (chunk?: string) => void;
+      writableEnded?: boolean;
+    };
+    if ((reqAny.method ?? 'GET').toUpperCase() !== 'POST') {
+      resAny.statusCode = 405;
+      resAny.setHeader('Content-Type', 'application/json');
+      resAny.end(JSON.stringify({ error: 'Method not allowed' }));
       return;
     }
 
-    await sigilProofHandler(req, res);
+    try {
+      const sigilProofHandler = await loadSigilProofHandler();
+      await sigilProofHandler(reqAny, resAny);
+      if (!resAny.writableEnded && typeof next === 'function') next();
+    } catch (error) {
+      if (!resAny.writableEnded) {
+        resAny.statusCode = 500;
+        resAny.setHeader('Content-Type', 'application/json');
+        resAny.end(JSON.stringify({ error: 'Proof handler failed to load' }));
+      }
+      if (typeof next === 'function') next(error as Error);
+    }
   };
 
   return {
@@ -50,6 +71,6 @@ export default defineConfig(({ command }) => ({
         ]
       }
     }),
-    ...(command === 'serve' ? [sigilProofApi()] : [])
+    sigilProofApi()
   ]
 }));
