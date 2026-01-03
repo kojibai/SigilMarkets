@@ -74,7 +74,7 @@ export const MarketFilters = (props: MarketFiltersProps) => {
         </button>
 
         <Chip size="sm" selected={layoutIsList} onClick={toggleLayout} left={<Icon name="hex" size={14} tone="dim" />}>
-          {layoutIsList ? "List" : "Honey"}
+          {layoutIsList ? "List" : "Grid"}
         </Chip>
 
         {anyFilters ? (
