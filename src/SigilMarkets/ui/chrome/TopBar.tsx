@@ -319,7 +319,7 @@ export const TopBar = (props: TopBarProps) => {
               className="sm-topbar-seal"
               left={<Icon name="spark" size={14} tone="gold" />}
             >
-              Seal Prophecy
+              <span className="sm-topbar-seal-text">Seal</span>
             </Chip>
 
             <LiveKaiButton
