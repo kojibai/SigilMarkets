@@ -222,6 +222,27 @@ text-shadow:
   0 0 5px var(--flash),
   0 0 18px var(--flash);
 }
+.center-dmy {
+  font-size: 0.5rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.center-dmy--day,
+.center-dmy--month {
+  fill: var(--cal);
+  text-shadow:
+    0 0 4px var(--cal),
+    0 0 12px color-mix(in srgb,var(--cal) 70%,transparent);
+}
+.center-dmy--year {
+  fill: #e8feff;
+  text-shadow:
+    0 0 4px rgba(232,254,255,0.65),
+    0 0 10px rgba(232,254,255,0.5);
+}
+.center-dmy--sep {
+  fill: rgba(220,232,250,0.85);
+}
 @keyframes pulseGlow {
 0%,100% { text-shadow: 0 0 5px var(--flash), 0 0 18px var(--flash); }
 35%     { text-shadow: 0 0 12px var(--flash), 0 0 42px var(--flash); }

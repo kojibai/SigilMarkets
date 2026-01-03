@@ -926,9 +926,12 @@ const KaiSigil = forwardRef<KaiSigilHandle, KaiSigilProps>((props, ref) => {
           const parsedInputs = JSON.parse(parsed.zkPublicInputs) as unknown;
           if (Array.isArray(parsedInputs)) {
             zkPublicInputs = parsedInputs.map((entry) => String(entry));
+          } else {
+            zkPublicInputs = [parsed.zkPublicInputs];
           }
         } catch (err) {
           console.debug("[KaiSigil] Failed to parse zkPublicInputs string", err);
+          zkPublicInputs = [parsed.zkPublicInputs];
         }
       }
       const proofPresent = isZkProofLike(parsed.zkProof);

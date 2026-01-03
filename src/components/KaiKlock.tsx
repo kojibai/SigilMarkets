@@ -1,5 +1,5 @@
 // KaiKlock.tsx — 120-px “Atlantean Lumitech” dial (100% responsive & mobile-safe)
-import React, { useEffect, useId } from "react";
+import React, { useEffect, useId, useMemo } from "react";
 import "./KaiKlock.css";
 
 // ⛓️ Canon is now in the separate file you created (Fast Refresh safe).
@@ -16,6 +16,14 @@ import {
   ETERNAL_PULSES_PER_STEP,
   BREATH_SEC,
 } from "./KaiKlock.canon";
+import {
+  DAYS_PER_MONTH,
+  DAYS_PER_YEAR,
+  MONTHS_PER_YEAR,
+  N_DAY_MICRO,
+  epochMsFromPulse,
+  microPulsesSinceGenesis,
+} from "../utils/kai_pulse";
 
 /* ─── Geometry & constants ───────────────────────────────────── */
 const SIZE = 120;
@@ -65,6 +73,41 @@ const parseStepFromString = (s?: string): number | undefined => {
   const n = parseInt(m[1], 10);
   if (!Number.isFinite(n)) return undefined;
   return clamp(n, 0, 43);
+};
+
+const modE = (a: bigint, m: bigint): bigint => {
+  const r = a % m;
+  return r >= 0n ? r : r + m;
+};
+
+const floorDivE = (a: bigint, d: bigint): bigint => {
+  if (d === 0n) throw new Error("Division by zero");
+  const q = a / d;
+  const r = a % d;
+  return r === 0n ? q : a >= 0n ? q : q - 1n;
+};
+
+const toSafeNumber = (x: bigint): number => {
+  const MAX = BigInt(Number.MAX_SAFE_INTEGER);
+  const MIN = BigInt(Number.MIN_SAFE_INTEGER);
+  if (x > MAX) return Number.MAX_SAFE_INTEGER;
+  if (x < MIN) return Number.MIN_SAFE_INTEGER;
+  return Number(x);
+};
+
+const kaiDMYFromPulseKKS = (pulse: number): { day: number; month: number; year: number } => {
+  const ms = epochMsFromPulse(pulse);
+  const pμ = microPulsesSinceGenesis(ms);
+
+  const dayIdx = floorDivE(pμ, N_DAY_MICRO);
+  const monthIdx = floorDivE(dayIdx, BigInt(DAYS_PER_MONTH));
+  const yearIdx = floorDivE(dayIdx, BigInt(DAYS_PER_YEAR));
+
+  const day = toSafeNumber(modE(dayIdx, BigInt(DAYS_PER_MONTH))) + 1;
+  const month = toSafeNumber(modE(monthIdx, BigInt(MONTHS_PER_YEAR))) + 1;
+  const year = toSafeNumber(yearIdx);
+
+  return { day, month, year };
 };
 
 /* ─── Component ─────────────────────────────────────────────── */
@@ -174,6 +217,11 @@ const KaiKlock: React.FC<KaiKlockProps> = ({
 
   const monthIndexRaw = months.indexOf(monthLabel) + 1;
   const monthIndex = monthIndexRaw > 0 ? monthIndexRaw : 1; // safe fallback
+
+  const dmy = useMemo(() => {
+    const dmyPulse = Number.isFinite(kaiPulseEternal) ? kaiPulseEternal : effectivePulse;
+    return kaiDMYFromPulseKKS(dmyPulse);
+  }, [effectivePulse, kaiPulseEternal]);
 
   const spacing = 14;
   const xBeat = C - spacing;
@@ -587,14 +635,16 @@ const KaiKlock: React.FC<KaiKlockProps> = ({
           className={`center-pulse ${glowPulse ? "pulse-flash" : ""}`}
           textAnchor="middle"
         >
-          {etBeatStr}:{etStepStr}
-        </text>
-
-        <text x={C} y={C + 8} className={`center-day day-${slug(dayLabel)}`} textAnchor="middle">
-          {dayLabel}
-        </text>
-        <text x={C} y={C + 18} className={`center-month month-${slug(monthLabel)}`} textAnchor="middle">
-          {monthLabel}
+          <tspan>{etBeatStr}:{etStepStr}</tspan>
+          <tspan className={`center-dmy center-dmy--day day-${slug(dayLabel)}`} dx="2">
+            D{dmy.day}
+          </tspan>
+          <tspan className="center-dmy center-dmy--sep">/</tspan>
+          <tspan className={`center-dmy center-dmy--month month-${slug(monthLabel)}`}>
+            M{dmy.month}
+          </tspan>
+          <tspan className="center-dmy center-dmy--sep">/</tspan>
+          <tspan className="center-dmy center-dmy--year">Y{dmy.year}</tspan>
         </text>
 
         {/* Eternal pulse number (raw, global) */}
