@@ -17,6 +17,7 @@ import { ToastHost } from "../atoms/Toast";
 import { useActiveVault } from "../../state/vaultStore";
 import { useGlyphBalance } from "../../hooks/useGlyphBalance";
 import { formatPhiMicro } from "../../utils/format";
+import { usd as formatUsd } from "../../../components/valuation/display";
 
 type ScrollMode = "window" | "container";
 
@@ -401,15 +402,22 @@ export const TopBar = (props: TopBarProps) => {
   const [klockOpen, setKlockOpen] = useState(false);
   const activeVault = useActiveVault();
   const glyphBalance = useGlyphBalance(activeVault, props.now);
+  const hasGlyph = Boolean(activeVault?.owner.identitySigil);
+  const liveUsdPerPhiLabel = useMemo(() => {
+    if (!Number.isFinite(glyphBalance.usdPerPhi) || glyphBalance.usdPerPhi <= 0) return "$ —";
+    return formatUsd(glyphBalance.usdPerPhi);
+  }, [glyphBalance.usdPerPhi]);
   const glyphPhiLabel = useMemo(() => {
-    if (!activeVault || glyphBalance.availableMicro === null) return "—";
+    if (!hasGlyph) return "—";
+    if (glyphBalance.availableMicro === null) return "—";
     return formatPhiMicro(glyphBalance.availableMicro, { withUnit: false, maxDecimals: 6, trimZeros: true });
-  }, [activeVault, glyphBalance.availableMicro]);
+  }, [glyphBalance.availableMicro, hasGlyph]);
   const glyphUsdLabel = useMemo(() => {
+    if (!hasGlyph) return "";
     if (!activeVault) return "$ —";
     if (glyphBalance.availableUsdLabel === "—") return "$ —";
     return glyphBalance.availableUsdLabel;
-  }, [activeVault, glyphBalance.availableUsdLabel]);
+  }, [activeVault, glyphBalance.availableUsdLabel, hasGlyph, liveUsdPerPhiLabel]);
 
   const sticky = useStickyHeader(
     props.scrollMode === "container"
@@ -467,11 +475,19 @@ export const TopBar = (props: TopBarProps) => {
               {props.subtitle ? <div className="sm-topbar-sub sm-topbar-sub--title">{props.subtitle}</div> : null}
               <div className="sm-topbar-glyph sm-topbar-glyph--inline" aria-label="Glyph balance">
                 <div className="sm-topbar-glyph-values">
-                  <span className="sm-topbar-glyph-phi">
-                    <img className="sm-topbar-glyph-phi-icon" src="/phi.svg" alt="" aria-hidden="true" />
-                    {glyphPhiLabel}
-                  </span>
-                  <span className="sm-topbar-glyph-usd">{glyphUsdLabel}</span>
+                  {hasGlyph ? (
+                    <span className="sm-topbar-glyph-phi">
+                      <img className="sm-topbar-glyph-phi-icon" src="/phi.svg" alt="" aria-hidden="true" />
+                      {glyphPhiLabel}
+                    </span>
+                  ) : (
+                    <span className="sm-topbar-glyph-phi sm-topbar-glyph-phi--price">
+                      {liveUsdPerPhiLabel}
+                      <span className="sm-topbar-glyph-slash">/</span>
+                      <img className="sm-topbar-glyph-phi-icon" src="/phi.svg" alt="" aria-hidden="true" />
+                    </span>
+                  )}
+                  {glyphUsdLabel ? <span className="sm-topbar-glyph-usd">{glyphUsdLabel}</span> : null}
                 </div>
               </div>
             </div>

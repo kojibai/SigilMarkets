@@ -6,8 +6,9 @@ import type { KaiMoment } from "../../types/marketTypes";
 import type { VaultRecord } from "../../types/vaultTypes";
 import { Card, CardContent } from "../../ui/atoms/Card";
 import { Chip } from "../../ui/atoms/Chip";
-import { Icon } from "../../ui/atoms/Icon";
+import { PhiIcon } from "../../ui/atoms/PhiIcon";
 import { Button } from "../../ui/atoms/Button";
+import { Icon } from "../../ui/atoms/Icon";
 import { shortHash, shortKey } from "../../utils/format";
 import { useSigilMarketsUi } from "../../state/uiStore";
 
@@ -55,7 +56,7 @@ export const VaultSigilCard = (props: VaultSigilCardProps) => {
           </div>
 
           <div className="sm-vault-sigil-badges">
-            <Chip size="sm" selected={false} variant="outline" tone={statusTone(v.status)} left={<Icon name="vault" size={14} tone="dim" />}>
+            <Chip size="sm" selected={false} variant="outline" tone={statusTone(v.status)} left={<PhiIcon size={14} />}>
               {v.status}
             </Chip>
             <Chip size="sm" selected={false} variant="outline" left={<Icon name="spark" size={14} tone="dim" />}>
