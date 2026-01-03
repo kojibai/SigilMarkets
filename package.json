@@ -29,6 +29,7 @@
     "react-router-dom": "^6.26.1",
     "snarkjs": "^0.7.5",
     "three": "^0.182.0",
+    "three-mesh-bvh": "^0.8.3",
     "zustand": "^4.5.5"
   },
   "devDependencies": {
