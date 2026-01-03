@@ -637,15 +637,39 @@ export const SigilMarketsVaultProvider = (props: Readonly<{ children: ReactNode 
         (prev) => {
           const existing = prev.byId[key];
           if (existing) {
-            created = existing;
+            const nextIdentitySigil = input.owner.identitySigil
+              ? {
+                  ...existing.owner.identitySigil,
+                  sigilId: input.owner.identitySigil.sigilId ?? existing.owner.identitySigil?.sigilId,
+                  svgHash: input.owner.identitySigil.svgHash,
+                  url: input.owner.identitySigil.url ?? existing.owner.identitySigil?.url,
+                  canonicalHash: input.owner.identitySigil.canonicalHash ?? existing.owner.identitySigil?.canonicalHash,
+                  valuePhiMicro: input.owner.identitySigil.valuePhiMicro ?? existing.owner.identitySigil?.valuePhiMicro,
+                  availablePhiMicro:
+                    input.owner.identitySigil.availablePhiMicro ?? existing.owner.identitySigil?.availablePhiMicro,
+                  lastValuedPulse: input.owner.identitySigil.lastValuedPulse ?? existing.owner.identitySigil?.lastValuedPulse,
+                }
+              : existing.owner.identitySigil;
+
+            const nextOwner = {
+              ...existing.owner,
+              userPhiKey: input.owner.userPhiKey,
+              kaiSignature: input.owner.kaiSignature,
+              zkProofRef: input.owner.zkProofRef ?? existing.owner.zkProofRef,
+              identitySigil: nextIdentitySigil,
+            };
+
+            const updated = nextOwner === existing.owner ? existing : { ...existing, owner: nextOwner };
+            created = updated;
             const ids = prev.ids.includes(input.vaultId) ? prev.ids : [input.vaultId, ...prev.ids];
             return {
               ...prev,
+              byId: updated === existing ? prev.byId : { ...prev.byId, [key]: updated },
               ids,
               activeVaultId: input.vaultId,
               status: "ready",
               error: undefined,
-              lastUpdatedPulse: Math.max(prev.lastUpdatedPulse ?? 0, existing.updatedPulse),
+              lastUpdatedPulse: Math.max(prev.lastUpdatedPulse ?? 0, updated.updatedPulse),
             };
           }
 
@@ -662,6 +686,10 @@ export const SigilMarketsVaultProvider = (props: Readonly<{ children: ReactNode 
                     sigilId: input.owner.identitySigil.sigilId,
                     svgHash: input.owner.identitySigil.svgHash,
                     url: input.owner.identitySigil.url,
+                    canonicalHash: input.owner.identitySigil.canonicalHash,
+                    valuePhiMicro: input.owner.identitySigil.valuePhiMicro,
+                    availablePhiMicro: input.owner.identitySigil.availablePhiMicro,
+                    lastValuedPulse: input.owner.identitySigil.lastValuedPulse,
                   }
                 : undefined,
             },
