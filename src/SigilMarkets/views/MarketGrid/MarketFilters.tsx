@@ -22,8 +22,11 @@ export const MarketFilters = (props: MarketFiltersProps) => {
 
   const toggleCat = (c: MarketCategory): void => {
     const has = active.includes(c);
-    const next = has ? active.filter((x) => x !== c) : [...active, c];
-    actions.setCategories(next);
+    if (has && active.length === 1) {
+      actions.setCategories([]);
+      return;
+    }
+    actions.setCategories([c]);
   };
 
   const layoutIsList = state.grid.prefs.layout === "list";

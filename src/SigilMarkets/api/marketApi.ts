@@ -661,6 +661,11 @@ export const seedDemoMarkets = (nowPulse: KaiPulse): readonly Market[] => {
     KAI: "kai",
     CULTURE: "culture",
     MARKETS: "markets",
+    FINANCE: "finance",
+    CRYPTO: "crypto",
+    TECH: "tech",
+    WORLD: "world",
+    OTHER: "other",
     SPORTS: "sports",
     WEATHER: "weather",
     CALENDAR: "calendar",
@@ -1005,6 +1010,42 @@ export const seedDemoMarkets = (nowPulse: KaiPulse): readonly Market[] => {
       tags: ["markets", "volatility", "today"],
       iconEmoji: "🌪️",
       closeInPulses: 17_491,
+    }),
+
+    /* ─────────────────────────────────────────────────────────────
+       💰 FINANCE / 💠 CRYPTO / 🧪 TECH / 🌍 WORLD / 🧩 OTHER
+       - Category: finance / crypto / tech / world / other
+    ───────────────────────────────────────────────────────────── */
+
+    mk("m_finance_fed_rate_hold", "fed-rate-hold", "Will the Fed keep rates unchanged at the next meeting?", {
+      category: CAT.FINANCE,
+      tags: ["finance", "macro", "rates"],
+      iconEmoji: "🏦",
+      closeInPulses: 17_491 * 14,
+    }),
+    mk("m_crypto_btc_dominance_up", "btc-dominance-up", "Will BTC dominance be higher by week’s end?", {
+      category: CAT.CRYPTO,
+      tags: ["crypto", "btc", "week"],
+      iconEmoji: "₿",
+      closeInPulses: 17_491 * 7,
+    }),
+    mk("m_tech_ai_release_week", "ai-release-week", "Will a major AI model release land this week?", {
+      category: CAT.TECH,
+      tags: ["tech", "ai", "week"],
+      iconEmoji: "🤖",
+      closeInPulses: 17_491 * 7,
+    }),
+    mk("m_world_major_summit_week", "major-summit-week", "Will a major world summit be announced this week?", {
+      category: CAT.WORLD,
+      tags: ["world", "diplomacy", "week"],
+      iconEmoji: "🌍",
+      closeInPulses: 17_491 * 7,
+    }),
+    mk("m_other_surprise_event_week", "surprise-event-week", "Will a surprise event trend worldwide this week?", {
+      category: CAT.OTHER,
+      tags: ["other", "trend", "week"],
+      iconEmoji: "🧩",
+      closeInPulses: 17_491 * 7,
     }),
 
     /* ─────────────────────────────────────────────────────────────
