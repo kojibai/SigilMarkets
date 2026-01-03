@@ -133,7 +133,7 @@ function LiveKaiButton({
   const snap = useMemo(() => {
     const m = momentFromPulse(now.pulse);
     const pulse = readNum(m, "pulse") ?? 0;
-    const pulseStr = formatPulse(pulse);
+    const pulseStr = Number.isFinite(pulse) ? pulse.toLocaleString("en-US") : formatPulse(pulse);
     const bsd = computeBeatStepDMY({ pulse });
 
     return {
@@ -225,7 +225,7 @@ function LiveKaiButton({
             </span>
           </div>
 
-          <div className="live-meta">
+          <div className="live-meta live-meta--pulse">
             <span className="mono" style={neonTextStyle}>
               {snap.pulseStr}
             </span>
@@ -319,7 +319,7 @@ export const TopBar = (props: TopBarProps) => {
               className="sm-topbar-seal"
               left={<Icon name="spark" size={14} tone="gold" />}
             >
-              Seal Prophecy
+              Seal
             </Chip>
 
             <LiveKaiButton

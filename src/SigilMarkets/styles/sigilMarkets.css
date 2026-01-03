@@ -33,6 +33,22 @@ body{
   --sm-gold: rgba(255,219,138,0.90);
   --sm-red: rgba(255,104,104,0.90);
   --sm-green: rgba(120,255,200,0.90);
+  --accent-color: rgba(0, 255, 255, 0.92);
+
+  --chakra-ink-0: #ff3b6b;
+  --chakra-ark-0: #ff6aa6;
+  --chakra-ink-1: #ff8a3d;
+  --chakra-ark-1: #ffc07a;
+  --chakra-ink-2: #ffd24a;
+  --chakra-ark-2: #fff2a6;
+  --chakra-ink-3: #26ffc4;
+  --chakra-ark-3: #a6ffe9;
+  --chakra-ink-4: #33f6ff;
+  --chakra-ark-4: #a8fbff;
+  --chakra-ink-5: #7e86ff;
+  --chakra-ark-5: #c6c9ff;
+  --chakra-ink-6: #c18bff;
+  --chakra-ark-6: #ead8ff;
 
   --sm-radius: 18px;
   --sm-radius2: 24px;
@@ -1158,6 +1174,12 @@ body{
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.live-meta--pulse{
+  flex: 0 0 auto;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 @media (max-width: 420px){
