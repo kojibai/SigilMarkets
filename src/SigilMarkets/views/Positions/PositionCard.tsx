@@ -8,6 +8,7 @@ import { useSigilMarketsUi } from "../../state/uiStore";
 import { useMarketById } from "../../state/marketStore";
 import { Card, CardContent } from "../../ui/atoms/Card";
 import { Chip } from "../../ui/atoms/Chip";
+import { Icon } from "../../ui/atoms/Icon";
 import { PhiIcon } from "../../ui/atoms/PhiIcon";
 import { formatPhiMicro, formatSharesMicro } from "../../utils/format";
 
