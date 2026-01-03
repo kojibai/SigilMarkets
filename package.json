@@ -11,6 +11,8 @@
     "lint": "eslint src --ext .ts,.tsx"
   },
   "dependencies": {
+    "@react-three/drei": "^9.100.0",
+    "@react-three/fiber": "^8.15.19",
     "@tanstack/react-query": "^5.45.0",
     "clsx": "^2.1.1",
     "decimal.js": "^10.6.0",
@@ -20,8 +22,8 @@
     "html2canvas": "^1.4.1",
     "jszip": "^3.10.1",
     "lucide-react": "^0.424.0",
-    "@react-three/fiber": "^8.15.19",
-    "@react-three/drei": "^9.100.0",
+    "qrcode": "^1.5.4",
+    "qrcode-generator": "^2.0.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.26.1",
