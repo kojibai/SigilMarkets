@@ -126,16 +126,6 @@ const safeCdata = (raw: string): string => {
   return `<![CDATA[${safe}]]>`;
 };
 
-const b64Utf8 = (s: string): string => {
-  try {
-    const b = (globalThis as unknown as { btoa?: (x: string) => string }).btoa;
-    if (typeof b === "function") return b(unescape(encodeURIComponent(s)));
-  } catch {
-    // ignore
-  }
-  return "";
-};
-
 /* ─────────────────────────────────────────────────────────────
  * Hash bit ring helpers
  * ───────────────────────────────────────────────────────────── */
@@ -209,32 +199,61 @@ const FALLBACK_META = { ip: { expectedCashflowPhi: [] } } as unknown as SigilMet
 
 
 /* ─────────────────────────────────────────────────────────────
- * Φ logo embedding (public/phi.svg => embedded data URL)
+ * Φ logo embedding (public/phi.svg => inline SVG markup)
  * ───────────────────────────────────────────────────────────── */
 
-let phiLogoDataUrlPromise: Promise<string | null> | null = null;
+type PhiLogoMarkup = Readonly<{
+  viewBox: string;
+  inner: string;
+}>;
 
-const getPhiLogoDataUrlAsync = async (): Promise<string | null> => {
-  if (phiLogoDataUrlPromise) return phiLogoDataUrlPromise;
+let phiLogoMarkupPromise: Promise<PhiLogoMarkup | null> | null = null;
 
-  phiLogoDataUrlPromise = (async () => {
+const extractPhiLogoMarkup = (raw: string): PhiLogoMarkup | null => {
+  const cleaned = raw
+    .replace(/<\?xml[^>]*\?>/g, "")
+    .replace(/<!DOCTYPE[^>]*>/g, "")
+    .trim();
+
+  const openMatch = cleaned.match(/<svg\b([^>]*)>/i);
+  const closeIndex = cleaned.toLowerCase().lastIndexOf("</svg>");
+  if (!openMatch || closeIndex < 0) return null;
+
+  const openTag = openMatch[0];
+  const attrs = openMatch[1] ?? "";
+  const inner = cleaned.slice(openTag.length, closeIndex).trim();
+
+  const viewBoxMatch = attrs.match(/viewBox\s*=\s*(['"])(.*?)\1/i);
+  let viewBox = viewBoxMatch?.[2] ?? "";
+  if (!viewBox) {
+    const widthMatch = attrs.match(/width\s*=\s*(['"]?)([\d.]+)\1/i);
+    const heightMatch = attrs.match(/height\s*=\s*(['"]?)([\d.]+)\1/i);
+    if (widthMatch && heightMatch) {
+      viewBox = `0 0 ${widthMatch[2]} ${heightMatch[2]}`;
+    }
+  }
+  if (!viewBox) viewBox = "0 0 400 400";
+
+  return inner ? { viewBox, inner } : null;
+};
+
+const getPhiLogoMarkupAsync = async (): Promise<PhiLogoMarkup | null> => {
+  if (phiLogoMarkupPromise) return phiLogoMarkupPromise;
+
+  phiLogoMarkupPromise = (async () => {
     try {
       // public/phi.svg should be reachable at /phi.svg
       const res = await fetch("/phi.svg", { cache: "force-cache" });
       if (!res.ok) return null;
       const raw = (await res.text()).trim();
       if (raw.length < 16) return null;
-
-      const cleaned = raw.replace(/<\?xml[^>]*\?>/g, "").replace(/<!DOCTYPE[^>]*>/g, "").trim();
-      const b64 = b64Utf8(cleaned);
-      if (!b64) return null;
-      return `data:image/svg+xml;base64,${b64}`;
+      return extractPhiLogoMarkup(raw);
     } catch {
       return null;
     }
   })();
 
-  return phiLogoDataUrlPromise;
+  return phiLogoMarkupPromise;
 };
 
 /* ─────────────────────────────────────────────────────────────
@@ -859,7 +878,7 @@ const buildSvg = async (
 
 
   // Embed φ logo from public/phi.svg
-  const phiLogoUrl = await getPhiLogoDataUrlAsync();
+  const phiLogo = await getPhiLogoMarkupAsync();
 
   // Machine metadata
   const payloadForMeta: Record<string, unknown> = { ...(payload as unknown as Record<string, unknown>) };
@@ -1272,15 +1291,17 @@ const fracDx = -Math.max(8, Math.round(AMT_FRAC_PX * 0.18));
 
     <!-- φ logo -->
     ${
-      phiLogoUrl
-        ? `<image
-  href="${esc(phiLogoUrl)}"
+      phiLogo
+        ? `<svg
   x="${phiX.toFixed(2)}"
   y="${phiY.toFixed(2)}"
   width="${phiSize}"
   height="${phiSize}"
+  viewBox="${esc(phiLogo.viewBox)}"
+  preserveAspectRatio="xMidYMid meet"
   opacity="0.96"
-/>
+  aria-hidden="true"
+>${phiLogo.inner}</svg>
 `
         : ""
     }
