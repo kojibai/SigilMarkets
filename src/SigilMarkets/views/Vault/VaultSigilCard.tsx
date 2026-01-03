@@ -8,6 +8,7 @@ import { Card, CardContent } from "../../ui/atoms/Card";
 import { Chip } from "../../ui/atoms/Chip";
 import { PhiIcon } from "../../ui/atoms/PhiIcon";
 import { Button } from "../../ui/atoms/Button";
+import { Icon } from "../../ui/atoms/Icon";
 import { shortHash, shortKey } from "../../utils/format";
 import { useSigilMarketsUi } from "../../state/uiStore";
 

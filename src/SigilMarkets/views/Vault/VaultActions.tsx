@@ -6,6 +6,7 @@ import type { KaiMoment } from "../../types/marketTypes";
 import type { VaultRecord } from "../../types/vaultTypes";
 import { Card, CardContent } from "../../ui/atoms/Card";
 import { Button } from "../../ui/atoms/Button";
+import { Icon } from "../../ui/atoms/Icon";
 import { PhiIcon } from "../../ui/atoms/PhiIcon";
 import { formatPhiMicro, formatPhiMicroCompact } from "../../utils/format";
 
