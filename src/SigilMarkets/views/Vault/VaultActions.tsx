@@ -94,7 +94,7 @@ export const VaultActions = (props: VaultActionsProps) => {
           </div>
         ) : (
           <div className="sm-small" style={{ marginTop: 10 }}>
-            Deposits/withdrawals are local in MVP. Wire to real rails in integration.
+            Deposits use verified glyph valuation; withdrawals move spendable Φ.
           </div>
         )}
       </CardContent>

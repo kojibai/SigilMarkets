@@ -31,6 +31,8 @@ import UpgradeSigilModal from "../../components/sigil/UpgradeSigilModal";
 import SigilConflictBanner from "../../components/SigilConflictBanner";
 import ValueHistoryModal from "../../components/ValueHistoryModal";
 import { useValueHistory } from "../../hooks/useValueHistory";
+import GlyphImportModal from "../../components/GlyphImportModal";
+import type { Glyph } from "../../glyph/types";
 /* ——— App-level Kai math ——— */
 import {
   ETERNAL_STEPS_PER_BEAT as STEPS_PER_BEAT,
@@ -55,7 +57,16 @@ import {
 } from "../../utils/provenance";
 import { ensureLink, setJsonLd, setMeta } from "../../utils/domHead";
 import { validateSvgForVerifier, putMetadata } from "../../utils/svgMeta";
-import { decodeSigilHistory, makeSigilUrl } from "../../utils/sigilUrl";
+import {
+  decodeSigilHistory,
+  extractPayloadFromUrl,
+  makeSigilUrl,
+  makeSigilUrlLoose,
+  type SigilSharePayloadLoose,
+} from "../../utils/sigilUrl";
+import { registerSigilUrl } from "../../utils/sigilRegistry";
+import { recordSigilTransferMovement } from "../../utils/sigilTransferRegistry";
+import { enqueueInhaleKrystal, flushInhaleQueue } from "../../components/SigilExplorer/inhaleQueue";
 
 /* ——— Theme ——— */
 import { CHAKRA_THEME} from "../../components/sigil/theme";
@@ -188,6 +199,34 @@ const toAbsUrl = (pathOrUrl: string): string => {
   } catch {
     return pathOrUrl;
   }
+};
+
+const buildExplorerPayloadFromGlyph = (
+  hash: string,
+  meta: SigilMetadataLite & Record<string, unknown>
+): SigilSharePayloadLoose | null => {
+  const pulse =
+    typeof meta.pulse === "number"
+      ? meta.pulse
+      : typeof meta.kaiPulse === "number"
+      ? meta.kaiPulse
+      : null;
+  const beat = typeof meta.beat === "number" ? meta.beat : null;
+  const stepIndex = typeof meta.stepIndex === "number" ? meta.stepIndex : null;
+  const chakraDay = typeof meta.chakraDay === "string" ? meta.chakraDay : null;
+  if (pulse == null || beat == null || stepIndex == null || !chakraDay) return null;
+
+  return {
+    pulse,
+    beat,
+    stepIndex,
+    chakraDay,
+    stepsPerBeat: typeof meta.stepsPerBeat === "number" ? meta.stepsPerBeat : STEPS_PER_BEAT,
+    canonicalHash: hash,
+    kaiSignature: typeof meta.kaiSignature === "string" ? meta.kaiSignature : undefined,
+    userPhiKey: typeof meta.userPhiKey === "string" ? meta.userPhiKey : undefined,
+    exportedAtPulse: typeof meta.exportedAtPulse === "number" ? meta.exportedAtPulse : undefined,
+  };
 };
 
 const acquireSendLock = (
@@ -2307,6 +2346,102 @@ const ensureParentTokenActive = useCallback(
 
   /* === Send Φ flow — v48 hardened === */
   const [sendAmount, setSendAmount] = useState<number>(0);
+  const [depositOpen, setDepositOpen] = useState(false);
+
+  const handleRegisterGlyphForExplorer = useCallback(
+    (glyph: Glyph) => {
+      const hash = typeof glyph.hash === "string" ? glyph.hash.toLowerCase() : "";
+      const meta = (glyph.meta || {}) as SigilMetadataLite & Record<string, unknown>;
+      if (!hash) return;
+      const payload = buildExplorerPayloadFromGlyph(hash, meta);
+      if (!payload) return;
+      const url = makeSigilUrlLoose(hash, payload);
+      registerSigilUrl(url);
+      enqueueInhaleKrystal(url, payload);
+      void flushInhaleQueue();
+    },
+    [enqueueInhaleKrystal, flushInhaleQueue, registerSigilUrl, makeSigilUrlLoose]
+  );
+
+  const handleDepositPhi = useCallback(
+    (amountPhi: number) => {
+      if (!ownerVerified) return signal(setToast, "Verify Stewardship first");
+      if (!payload) return signal(setToast, "No payload");
+
+      const amt = Number(amountPhi) || 0;
+      if (amt <= 0) return signal(setToast, "Enter an amount > 0");
+
+      const h = currentCanonicalUtil(payload ?? null, localHash, legacyInfo);
+      let tok = currentTokenUtil(transferToken, payload ?? null);
+      if (!tok) tok = ensureParentTokenActive({ silent: true }) || null;
+      if (!h || !tok) return signal(setToast, "Link not initialized");
+
+      const { merged } = bestDebitsForCanonical(
+        h,
+        new URLSearchParams(window.location.search),
+        tok
+      );
+
+      const frozenOrig =
+        typeof merged.originalAmount === "number"
+          ? merged.originalAmount
+          : typeof (payload as SPWithDebits | null)?.originalAmount === "number"
+          ? (payload as SPWithDebits).originalAmount!
+          : (valSeal?.valuePhi ?? 0);
+
+      const current = capDebitsQS({
+        originalAmount: frozenOrig,
+        debits: Array.isArray(merged.debits) ? merged.debits : [],
+      });
+
+      const nextOriginal = Number((Number(current.originalAmount ?? 0) + amt).toFixed(6));
+      const proposed = capDebitsQS({
+        originalAmount: nextOriginal,
+        debits: Array.isArray(current.debits) ? current.debits : [],
+      });
+
+      updateDebitsEverywhere(proposed, h, tok, { broadcast: true });
+
+      setPayload((prev) => {
+        if (!prev) return prev;
+        const base = { ...(prev as SigilPayload) };
+        const next = base as SigilPayloadWithDebits;
+        next.originalAmount = nextOriginal;
+        next.debits = (Array.isArray(proposed.debits)
+          ? (proposed.debits as unknown as DebitLoose[])
+          : []) as DebitLoose[];
+        next.totalDebited = sumDebits(next.debits);
+        return next as SigilPayload;
+      });
+
+      const amountUsd = usdPerPhi && Number.isFinite(usdPerPhi) ? Number((amt * usdPerPhi).toFixed(2)) : undefined;
+      recordSigilTransferMovement({
+        hash: h,
+        direction: "receive",
+        amountPhi: Number(amt.toFixed(6)),
+        amountUsd,
+        sentPulse: getKaiPulseEternalInt(new Date()),
+      });
+
+      signal(setToast, `Deposited ${currency(amt)} Φ`);
+    },
+    [
+      ownerVerified,
+      payload,
+      localHash,
+      legacyInfo,
+      transferToken,
+      ensureParentTokenActive,
+      valSeal?.valuePhi,
+      usdPerPhi,
+      setPayload,
+      bestDebitsForCanonical,
+      capDebitsQS,
+      updateDebitsEverywhere,
+      recordSigilTransferMovement,
+      sumDebits,
+    ]
+  );
   const handleSendPhi = useCallback(async () => {
     if (!ownerVerified) return signal(setToast, "Verify Stewardship first");
     if (!payload) return signal(setToast, "No payload");
@@ -2414,9 +2549,29 @@ const ensureParentTokenActive = useCallback(
   
       setSendAmount(0);
       signal(setToast, `Sent ${currency(debit.amount)} Φ`);
-  
-      // ✅ pass the fresh token so modal opens & stays open on first send
-      void mintChildSigil(debit.amount, tok);
+
+      const mintedUrl = await mintChildSigil(debit.amount, tok);
+      if (mintedUrl) {
+        registerSigilUrl(mintedUrl);
+        const payloadFromUrl = extractPayloadFromUrl(mintedUrl);
+        if (payloadFromUrl) {
+          enqueueInhaleKrystal(mintedUrl, payloadFromUrl);
+          void flushInhaleQueue();
+        }
+        const amountUsd = usdPerPhi && Number.isFinite(usdPerPhi)
+          ? Number((debit.amount * usdPerPhi).toFixed(2))
+          : undefined;
+        const childHash = canonicalFromUrl(mintedUrl) ?? payloadFromUrl?.canonicalHash ?? "";
+        if (childHash) {
+          recordSigilTransferMovement({
+            hash: childHash,
+            direction: "send",
+            amountPhi: debit.amount,
+            amountUsd,
+            sentPulse: debit.timestamp,
+          });
+        }
+      }
     } finally {
       releaseSendLock(h, tok, sendLockIdRef.current);
       setSendInFlight(false);
@@ -2437,6 +2592,12 @@ const ensureParentTokenActive = useCallback(
     setSendAmount,
     sendInFlight,
     ensureParentTokenActive,
+    usdPerPhi,
+    registerSigilUrl,
+    extractPayloadFromUrl,
+    enqueueInhaleKrystal,
+    flushInhaleQueue,
+    recordSigilTransferMovement,
   ]);
   
   // Disable transform/fixed glitches on iOS while any overlay is up
@@ -3206,6 +3367,31 @@ useEffect(() => {
 <div className="owner-gated">
   {ownerVerified && (
     <div className="sp-card" style={{ padding: 16, margin: "8px 0 16px" }}>
+      <h3 style={{ marginTop: 0 }}>Deposit Φ</h3>
+
+      <div className="auth-badge auth-badge--available" style={{ marginBottom: 12 }}>
+        Current Available Φ:&nbsp;<strong>{currency(availablePhi)}</strong>
+      </div>
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
+        <button
+          type="button"
+          className="btn-primary"
+          onClick={() => setDepositOpen(true)}
+          aria-label="Upload glyph to deposit Φ"
+          title="Upload a verified glyph to deposit Φ"
+        >
+          ⤓ Upload Glyph
+        </button>
+        <div style={{ opacity: 0.85 }}>
+          Upload a real sigil glyph to inhale Φ into this sigil. Deposits are capped by the
+          verified glyph’s live valuation.
+        </div>
+      </div>
+    </div>
+  )}
+  {ownerVerified && (
+    <div className="sp-card" style={{ padding: 16, margin: "8px 0 16px" }}>
       <h3 style={{ marginTop: 0 }}>Exhale Φ</h3>
 
       <div className="auth-badge auth-badge--checking" style={{ marginBottom: 12 }}>
@@ -3360,6 +3546,13 @@ useEffect(() => {
         onDownloadZip={() => {
           claimPress.onClick?.(new MouseEvent("click") as unknown as React.MouseEvent<HTMLButtonElement>);
         }}
+      />
+
+      <GlyphImportModal
+        open={depositOpen}
+        onClose={() => setDepositOpen(false)}
+        onImport={handleRegisterGlyphForExplorer}
+        onCreditPhi={handleDepositPhi}
       />
 
       {/* UpgradeSigilModal — legacy-only, one-time */}
