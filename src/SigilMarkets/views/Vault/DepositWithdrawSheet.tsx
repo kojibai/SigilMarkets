@@ -1,7 +1,7 @@
 // SigilMarkets/views/Vault/DepositWithdrawSheet.tsx
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import type { KaiMoment, PhiMicro } from "../../types/marketTypes";
 import type { VaultRecord } from "../../types/vaultTypes";
 import { Sheet } from "../../ui/atoms/Sheet";
@@ -12,6 +12,46 @@ import { parsePhiToMicro, formatPhiMicro } from "../../utils/format";
 import { useVaultActions } from "../../hooks/useVault";
 import { useGlyphBalance } from "../../hooks/useGlyphBalance";
 import { recordSigilTransferMovement } from "../../../utils/sigilTransferRegistry";
+import KaiSigil, { type KaiSigilHandle } from "../../../components/KaiSigil";
+import { download } from "../../../components/VerifierStamper/files";
+import { momentFromPulse, STEPS_BEAT } from "../../../utils/kai_pulse";
+import { makeSigilUrlLoose, type SigilSharePayloadLoose } from "../../../utils/sigilUrl";
+import { registerSigilUrl } from "../../../utils/sigilRegistry";
+
+type VaultDepositSigilPayloadV1 = Readonly<{
+  v: "SM-VAULT-DEPOSIT-1";
+  kind: "vault-deposit";
+  vaultId: string;
+  userPhiKey: string;
+  kaiSignature: string;
+  identitySvgHash: string;
+  amountPhi: string;
+  amountMicro: string;
+  spendableMicro: string;
+  lockedMicro: string;
+  depositPulse: number;
+  canonicalHash?: string;
+}>;
+
+type DepositSigilReady = Readonly<{
+  hash: string;
+  url: string;
+  metadataJson: string;
+}>;
+
+const encodeCdataJson = (payload: unknown): string =>
+  JSON.stringify(payload, null, 2).replace(/]]>/g, "]]]]><![CDATA[>");
+
+const writeDepositMetadataIntoSvg = async (
+  svgBlob: Blob,
+  payload: VaultDepositSigilPayloadV1,
+): Promise<Blob> => {
+  const raw = await svgBlob.text();
+  const json = encodeCdataJson(payload);
+  const tag = `<metadata id="sm-vault-deposit" data-type="application/json"><![CDATA[${json}]]></metadata>`;
+  const patched = raw.replace(/<\/svg>\s*$/i, `${tag}</svg>`);
+  return new Blob([patched], { type: "image/svg+xml" });
+};
 
 export type DepositWithdrawSheetProps = Readonly<{
   open: boolean;
@@ -26,6 +66,10 @@ export const DepositWithdrawSheet = (props: DepositWithdrawSheetProps) => {
 
   const [amt, setAmt] = useState<string>("");
   const [err, setErr] = useState<string | null>(null);
+  const [proofReady, setProofReady] = useState<DepositSigilReady | null>(null);
+  const [proofBusy, setProofBusy] = useState(false);
+
+  const sigilRef = useRef<KaiSigilHandle | null>(null);
 
   const title = props.mode === "deposit" ? "Deposit Φ" : "Withdraw Φ";
   const glyphBalance = useGlyphBalance(props.vault, props.now);
@@ -45,7 +89,64 @@ export const DepositWithdrawSheet = (props: DepositWithdrawSheetProps) => {
     .toString()
     .toLowerCase();
 
-  const apply = (): void => {
+  const depositMoment = useMemo(() => momentFromPulse(props.now.pulse), [props.now.pulse]);
+
+  const buildDepositProof = useCallback(
+    async (amountMicro: PhiMicro, amountPhiText: string): Promise<void> => {
+      const identity = props.vault.owner.identitySigil;
+      if (!identity) return;
+      if (!sigilRef.current || !proofReady) return;
+
+      const svgBlob = await sigilRef.current.exportBlob("image/svg+xml");
+
+      const payload: VaultDepositSigilPayloadV1 = {
+        v: "SM-VAULT-DEPOSIT-1",
+        kind: "vault-deposit",
+        vaultId: String(props.vault.vaultId),
+        userPhiKey: String(props.vault.owner.userPhiKey),
+        kaiSignature: String(props.vault.owner.kaiSignature),
+        identitySvgHash: String(identity.svgHash),
+        amountPhi: amountPhiText,
+        amountMicro: amountMicro.toString(),
+        spendableMicro: (props.vault.spendableMicro + amountMicro).toString(),
+        lockedMicro: props.vault.lockedMicro.toString(),
+        depositPulse: props.now.pulse,
+        canonicalHash: proofReady.hash,
+      };
+
+      const wrappedSvg = await writeDepositMetadataIntoSvg(svgBlob, payload);
+
+      const payloadLoose: SigilSharePayloadLoose & Record<string, unknown> = {
+        pulse: depositMoment.pulse,
+        beat: depositMoment.beat,
+        stepIndex: depositMoment.stepIndex,
+        chakraDay: depositMoment.chakraDay,
+        stepsPerBeat: STEPS_BEAT,
+        kaiSignature: String(props.vault.owner.kaiSignature),
+        userPhiKey: String(props.vault.owner.userPhiKey),
+        canonicalHash: proofReady.hash,
+        transferDirection: "send",
+        transferAmountPhi: amountPhiText,
+        transferPulse: props.now.pulse,
+        vaultId: String(props.vault.vaultId),
+        identitySvgHash: String(identity.svgHash),
+        depositProof: payload,
+      };
+
+      const sigilUrl = makeSigilUrlLoose(proofReady.hash, payloadLoose, {
+        origin: typeof window !== "undefined" ? window.location.origin : "",
+        parentUrl: identity.url,
+      });
+      if (sigilUrl) {
+        registerSigilUrl(sigilUrl);
+      }
+
+      download(wrappedSvg, `kaisigil_deposit_${props.now.pulse}.svg`);
+    },
+    [depositMoment, proofReady, props.now.pulse, props.vault],
+  );
+
+  const apply = async (): Promise<void> => {
     const r = parsePhiToMicro(amt);
     if (!r.ok) {
       setErr(r.error);
@@ -54,19 +155,28 @@ export const DepositWithdrawSheet = (props: DepositWithdrawSheetProps) => {
     setErr(null);
 
     if (props.mode === "deposit") {
+      const amountMicro = r.micro as PhiMicro;
       if (glyphAvailableMicro === undefined) {
         setErr("Glyph balance unavailable. Re-inhale your identity glyph to sync.");
         return;
       }
-      if (glyphAvailableMicro < (r.micro as PhiMicro)) {
+      if (glyphAvailableMicro < amountMicro) {
         setErr("Amount exceeds available glyph balance.");
         return;
       }
-      deposit(props.vault.vaultId, r.micro as PhiMicro, props.now.pulse);
+      if (!props.vault.owner.identitySigil) {
+        setErr("Missing identity glyph. Re-inhale your identity glyph to sync.");
+        return;
+      }
+      if (!proofReady) {
+        setErr("Deposit proof not ready yet. Please wait a moment and try again.");
+        return;
+      }
+      deposit(props.vault.vaultId, amountMicro, props.now.pulse);
       if (glyphHash) {
         const amountUsd =
           Number.isFinite(glyphBalance.usdPerPhi) && glyphBalance.usdPerPhi > 0
-            ? (Number(r.micro) / 1_000_000) * glyphBalance.usdPerPhi
+            ? (Number(amountMicro) / 1_000_000) * glyphBalance.usdPerPhi
             : undefined;
         recordSigilTransferMovement({
           hash: glyphHash,
@@ -76,6 +186,18 @@ export const DepositWithdrawSheet = (props: DepositWithdrawSheetProps) => {
           sentPulse: props.now.pulse,
         });
       }
+      let proofErrored = false;
+      try {
+        setProofBusy(true);
+        await buildDepositProof(amountMicro, amt);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Failed to mint deposit proof";
+        setErr(msg);
+        proofErrored = true;
+      } finally {
+        setProofBusy(false);
+      }
+      if (proofErrored) return;
     } else {
       withdraw(props.vault.vaultId, r.micro as PhiMicro, props.now.pulse);
     }
@@ -101,8 +223,12 @@ export const DepositWithdrawSheet = (props: DepositWithdrawSheetProps) => {
           </Button>
           <Button
             variant="primary"
-            onClick={apply}
-            disabled={amt.trim().length === 0 || (props.mode === "deposit" && glyphAvailableMicro === undefined)}
+            onClick={() => void apply()}
+            disabled={
+              amt.trim().length === 0 ||
+              (props.mode === "deposit" && (glyphAvailableMicro === undefined || !proofReady)) ||
+              proofBusy
+            }
             leftIcon={<Icon name="vault" size={14} tone="gold" />}
           >
             Apply
@@ -111,6 +237,29 @@ export const DepositWithdrawSheet = (props: DepositWithdrawSheetProps) => {
       }
     >
       <div className="sm-dw">
+        {props.mode === "deposit" ? (
+          <div aria-hidden style={{ position: "absolute", width: 0, height: 0, overflow: "hidden" }}>
+            <KaiSigil
+              ref={sigilRef}
+              pulse={depositMoment.pulse}
+              beat={depositMoment.beat}
+              stepIndex={depositMoment.stepIndex}
+              chakraDay={depositMoment.chakraDay}
+              userPhiKey={String(props.vault.owner.userPhiKey)}
+              kaiSignature={String(props.vault.owner.kaiSignature)}
+              origin={typeof window !== "undefined" ? window.location.origin : undefined}
+              animate={false}
+              quality="high"
+              showZKBadge={false}
+              onReady={({ hash, url, metadataJson }) => {
+                setProofReady({ hash, url, metadataJson });
+              }}
+              onError={() => {
+                setProofReady(null);
+              }}
+            />
+          </div>
+        ) : null}
         <input
           className="sm-input"
           value={amt}
