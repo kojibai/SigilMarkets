@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useMemo } from "react";
 import { CENTER, PHI, SPACE, lissajousPath } from "./constants";
+import type { ZkProof } from "./types";
 import { PULSE_MS } from "../../utils/kai_pulse";
 
 type Props = {
@@ -8,6 +9,11 @@ type Props = {
   phaseColor: string;
   outerRingText: string;
   innerRingText: string;
+  verified: boolean;
+  zkScheme?: string;
+  zkPoseidonHash?: string;
+  zkProof?: ZkProof | null;
+  zkPublicInputs?: string[] | null;
   animate: boolean;
   prefersReduce: boolean;
 };
@@ -18,6 +24,11 @@ const ZKGlyph: React.FC<Props> = ({
   phaseColor,
   outerRingText,
   innerRingText,
+  verified,
+  zkScheme,
+  zkPoseidonHash,
+  zkProof,
+  zkPublicInputs,
   animate,
   prefersReduce,
 }) => {
@@ -80,6 +91,8 @@ const ZKGlyph: React.FC<Props> = ({
 
   const outerFont = Math.max(8, (size ?? 240) * 0.026);
   const innerFont = Math.max(7, (size ?? 240) * 0.022);
+  const infoFont = Math.max(6, (size ?? 240) * 0.018);
+  const verifiedFont = Math.max(10, (size ?? 240) * 0.045);
 
   const approxCharW = (fs: number) => fs * 0.62; // good mono approximation
   const maxCharsForRadius = (radius: number, fs: number) => {
@@ -163,6 +176,47 @@ const ZKGlyph: React.FC<Props> = ({
       </g>
     );
   };
+
+  const infoLines = useMemo(() => {
+    const lines: string[] = [];
+    const scheme = (zkScheme ?? "").trim();
+    const poseidon = (zkPoseidonHash ?? "").trim();
+    const proof = zkProof ?? null;
+    const inputs = zkPublicInputs ?? [];
+
+    if (scheme) lines.push(`scheme=${scheme}`);
+    if (poseidon) lines.push(`poseidon=${poseidon}`);
+
+    if (proof) {
+      const piA = proof.pi_a.join(",");
+      const piB = proof.pi_b.map((pair) => pair.join(",")).join(" | ");
+      const piC = proof.pi_c.join(",");
+      lines.push(`groth16.pi_a=${piA}`);
+      lines.push(`groth16.pi_b=${piB}`);
+      lines.push(`groth16.pi_c=${piC}`);
+    }
+
+    if (inputs.length) {
+      lines.push(`public_inputs=${inputs.join(",")}`);
+    }
+
+    const maxChars = Math.max(20, Math.floor((rInner * 1.9) / (infoFont * 0.62)));
+    const wrapped: string[] = [];
+    lines.forEach((line) => {
+      if (line.length <= maxChars) {
+        wrapped.push(line);
+        return;
+      }
+      for (let i = 0; i < line.length; i += maxChars) {
+        wrapped.push(line.slice(i, i + maxChars));
+      }
+    });
+    return wrapped;
+  }, [infoFont, rInner, zkPoseidonHash, zkProof, zkPublicInputs, zkScheme]);
+
+  const infoBlockY = CENTER + rInner / PHI;
+  const verifiedY = CENTER - rInner / PHI;
+  const infoLineHeight = infoFont * PHI * 0.72;
 
   return (
     <g
@@ -270,6 +324,43 @@ const ZKGlyph: React.FC<Props> = ({
           "#00FFD0",
           0.28
         )}
+
+      {verified && (
+        <text
+          x={CENTER}
+          y={verifiedY}
+          textAnchor="middle"
+          dominantBaseline="middle"
+          fontFamily={mono}
+          fontSize={verifiedFont}
+          fill="#00FFD0"
+          letterSpacing="0.2em"
+          opacity="0.78"
+        >
+          VERIFIED
+        </text>
+      )}
+
+      {infoLines.length > 0 && (
+        <g aria-hidden="true">
+          {infoLines.map((line, i) => (
+            <text
+              key={`${i}-${line}`}
+              x={CENTER}
+              y={infoBlockY + i * infoLineHeight}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              fontFamily={mono}
+              fontSize={infoFont}
+              fill="#c8fff2"
+              opacity="0.5"
+              letterSpacing="0.01em"
+            >
+              {line}
+            </text>
+          ))}
+        </g>
+      )}
     </g>
   );
 };

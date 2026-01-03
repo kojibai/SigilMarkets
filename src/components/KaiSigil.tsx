@@ -33,6 +33,7 @@ import type {
   Built,
   SnapshotKey,
   WeekdayName,
+  ZkProof,
 } from "./KaiSigil/types";
 
 import {
@@ -112,6 +113,12 @@ type KksV1 = Readonly<{
   stepsPerBeat: number;         // 44
   pulsesPerStep: number;        // 11
 }>;
+
+const isZkProof = (value: unknown): value is ZkProof => {
+  if (!value || typeof value !== "object") return false;
+  const rec = value as Record<string, unknown>;
+  return Array.isArray(rec.pi_a) && Array.isArray(rec.pi_b) && Array.isArray(rec.pi_c);
+};
 
 function deriveKksV1FromPulse(pulse: number): KksV1 {
   const p = Number.isFinite(pulse) ? Math.trunc(pulse) : 0;
@@ -832,7 +839,7 @@ const KaiSigil = forwardRef<KaiSigilHandle, KaiSigilProps>((props, ref) => {
     canon.pulse,
     canon.beat,
     displayStepIndex,
-    zkPoseidonHash
+    zkPoseidonForRender
   );
 
   const embeddedMetaJson = useMemo(() => {
@@ -870,6 +877,49 @@ const KaiSigil = forwardRef<KaiSigilHandle, KaiSigilProps>((props, ref) => {
   const { ledgerJson, dhtJson } = useMemo(
     () => precomputeLedgerDht(stateKeyOk ? built?.embeddedMetaJson : undefined),
     [built, stateKeyOk]
+  );
+
+  const zkMeta = useMemo(() => {
+    if (!stateKeyOk) return null;
+    const raw = built?.embeddedMetaJson;
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (!isPlainObj(parsed)) return null;
+      const zkPoseidonHashNext = getStrField(parsed, "zkPoseidonHash");
+      const proofHintsRaw = isPlainObj(parsed.proofHints) ? parsed.proofHints : null;
+      const proofHints = proofHintsRaw
+        ? {
+            scheme: getStrField(proofHintsRaw, "scheme"),
+            api: getStrField(proofHintsRaw, "api"),
+            explorer: getStrField(proofHintsRaw, "explorer"),
+          }
+        : undefined;
+      const zkProofNext = isZkProof((parsed as Record<string, unknown>).zkProof)
+        ? ((parsed as Record<string, unknown>).zkProof as ZkProof)
+        : null;
+      const zkPublicInputsRaw = (parsed as Record<string, unknown>).zkPublicInputs;
+      const zkPublicInputsNext = Array.isArray(zkPublicInputsRaw)
+        ? zkPublicInputsRaw.filter((v): v is string => typeof v === "string")
+        : null;
+      return {
+        zkPoseidonHash: zkPoseidonHashNext ?? undefined,
+        zkProof: zkProofNext,
+        zkPublicInputs: zkPublicInputsNext,
+        proofHints,
+      };
+    } catch (err) {
+      console.debug("[KaiSigil] Failed to parse embedded zk metadata", err);
+      return null;
+    }
+  }, [built, stateKeyOk]);
+
+  const zkPoseidonForRender = zkMeta?.zkPoseidonHash ?? zkPoseidonHash;
+  const zkSchemeForRender = zkMeta?.proofHints?.scheme ?? zkScheme;
+  const zkVerified = Boolean(
+    zkSchemeForRender?.includes("groth16") &&
+      zkPoseidonForRender &&
+      zkMeta?.zkProof
   );
 
   /* Imperative API */
@@ -1059,6 +1109,11 @@ const KaiSigil = forwardRef<KaiSigilHandle, KaiSigilProps>((props, ref) => {
           phaseColor={phaseColor}
           outerRingText={outerRingText}
           innerRingText={stateKeyOk ? built?.innerRingText ?? "initializing…" : "initializing…"}
+          verified={zkVerified}
+          zkScheme={zkSchemeForRender}
+          zkPoseidonHash={zkPoseidonForRender}
+          zkProof={zkMeta?.zkProof ?? null}
+          zkPublicInputs={zkMeta?.zkPublicInputs ?? null}
           animate={animate}
           prefersReduce={prefersReduce}
         />
