@@ -15,7 +15,6 @@ const PULSES_PER_STEP = 11; // keep local (valuation exports internal only)
 const clamp = (x: number, a: number, b: number) => Math.max(a, Math.min(b, x));
 const q = (x: number, d = 9) => Math.round(x * 10 ** d) / 10 ** d;
 
-
 function stepIndexFromPulse(p: number, stepsPerBeat: number) {
   const n = Math.trunc(Math.max(0, p));
   return Math.floor(n / PULSES_PER_STEP) % Math.max(1, stepsPerBeat);
@@ -50,15 +49,15 @@ export type IssuancePolicy = {
   adoptionLambda: number; // suggested ≈ 1/φ
 
   /** Premium coupling (inverse, tiny): M_premium = (1/premium)^γ */
-  premiumGamma: number;   // suggested ≈ 1/φ^2
+  premiumGamma: number; // suggested ≈ 1/φ^2
 
   /** Moment quality: M_moment = 1 + momentBoostMax * rarityScore (0..1) */
   momentBoostMax: number; // tiny, e.g. 1/φ^2
 
   /** Single-transaction size booster (log-shaped, capped) + optional whale taper */
-  sizeScaleUsd: number;   // scale for log1p
-  sizeMu: number;         // slope (≈ 1/φ^3)
-  sizeCap: number;        // hard cap on size boost (e.g. 1 + 1/φ^2)
+  sizeScaleUsd: number; // scale for log1p
+  sizeMu: number; // slope (≈ 1/φ^3)
+  sizeCap: number; // hard cap on size boost (e.g. 1 + 1/φ^2)
   whaleTaper?: { k: number }; // optional: 1/√(1 + k·usd)
 
   /** Streak booster (per consecutive Kai-day): 1 + s·(1 − φ^(−N)) */
@@ -72,10 +71,10 @@ export type IssuancePolicy = {
 
   /** Choir resonance (coordination in a small Kai window) */
   choir?: {
-    windowPulses: number;     // half-width window
-    maxBoost: number;         // e.g., 1/φ^3
-    wStep: number;            // weight for step-index alignment (0..1)
-    wBreath: number;          // weight for breath-residue alignment (0..1); wStep + wBreath = 1
+    windowPulses: number; // half-width window
+    maxBoost: number; // e.g., 1/φ^3
+    wStep: number; // weight for step-index alignment (0..1)
+    wBreath: number; // weight for breath-residue alignment (0..1); wStep + wBreath = 1
   };
 
   /** Breath-sync alignment (user taps their breath phase 0..1) */
@@ -86,9 +85,9 @@ export type IssuancePolicy = {
   /** Festival windows (deterministic, no RNG) */
   festival?: {
     mode: "phiTransition" | "beatEvery";
-    interval: number;      // every N transitions or beats
-    widthBeats: number;    // window half-width in beats
-    bonus: number;         // extra multiplier within the window
+    interval: number; // every N transitions or beats
+    widthBeats: number; // window half-width in beats
+    bonus: number; // extra multiplier within the window
   };
 
   /** Milestones: deterministic step-downs of Φ/$ as adoption or time advances */
@@ -110,51 +109,46 @@ export type IssuancePolicy = {
   /** Vow lock: early unlock penalty directs unvested bonus to Stewardship Pool */
   vow?: {
     earlyUnlockPenalty: number; // fraction of *unvested* bonus lost if broken early
-    stewardEpochBeats: number;  // distribution cadence in beats
+    stewardEpochBeats: number; // distribution cadence in beats
     stewardSpreadBeats: number; // spread stream over this span
   };
 };
 
 export const DEFAULT_ISSUANCE_POLICY: IssuancePolicy = {
-  basePhiPerUsd: 0.10,          // tune α to your economics
-  adoptionLambda: 1 / PHI,      // ≈ 0.618
-  premiumGamma: 1 / (PHI**2),   // ≈ 0.382
-  momentBoostMax: 1 / (PHI**2), // up to +38.2% at rarityScore=1
+  basePhiPerUsd: 0.10, // tune α to your economics
+  adoptionLambda: 1 / PHI, // ≈ 0.618
+  premiumGamma: 1 / PHI ** 2, // ≈ 0.382
+  momentBoostMax: 1 / PHI ** 2, // up to +38.2% at rarityScore=1
   sizeScaleUsd: 100,
-  sizeMu: 1 / (PHI**3),         // ≈ 0.236
-  sizeCap: 1 + 1 / (PHI**2),    // ≈ +38.2% max size boost
-  whaleTaper: { k: 1 / (PHI**4) }, // gentle diminishing returns on huge single tx
-  streakMaxBoost: 1 / (PHI**3), // up to ~+23.6% with long streak
+  sizeMu: 1 / PHI ** 3, // ≈ 0.236
+  sizeCap: 1 + 1 / PHI ** 2, // ≈ +38.2% max size boost
+  whaleTaper: { k: 1 / PHI ** 4 }, // gentle diminishing returns on huge single tx
+  streakMaxBoost: 1 / PHI ** 3, // up to ~+23.6% with long streak
   lifetimeTiers: [
-    { thresholdUsd: 200,  boost: 0.05 },
+    { thresholdUsd: 200, boost: 0.05 },
     { thresholdUsd: 1000, boost: 0.10 },
     { thresholdUsd: 3000, boost: 0.16 },
   ],
-  holdBonus: { eta: 1 / (PHI**2), rho: 1 / (PHI**3), capMultiple: 1 / PHI }, // cap ≈ +61.8% of addPhi
-
-  choir: { windowPulses: 242, maxBoost: 1/(PHI**3), wStep: 0.6, wBreath: 0.4 }, // ~half-beat window
-  breath: { maxBoost: 1/(PHI**4) },
-  festival: { mode: "beatEvery", interval: 13, widthBeats: 1, bonus: 1/(PHI**4) },
-
-  // Example milestone schedule: conservative, φ-flavored step-downs over adoption + time
+  holdBonus: { eta: 1 / PHI ** 2, rho: 1 / PHI ** 3, capMultiple: 1 / PHI }, // cap ≈ +61.8% of addPhi
+  choir: { windowPulses: 242, maxBoost: 1 / PHI ** 3, wStep: 0.6, wBreath: 0.4 }, // ~half-beat window
+  breath: { maxBoost: 1 / PHI ** 4 },
+  festival: { mode: "beatEvery", interval: 13, widthBeats: 1, bonus: 1 / PHI ** 4 },
   milestones: {
     adoption: [
       { atAdoption: 0.10, multiplier: 0.95 },
       { atAdoption: 0.25, multiplier: 0.90 },
-      { atAdoption: 0.50, multiplier: 1 / PHI },       // ≈ 0.618
-      { atAdoption: 0.75, multiplier: 1 / (PHI**1.25) } // gentle glide
+      { atAdoption: 0.50, multiplier: 1 / PHI }, // ≈ 0.618
+      { atAdoption: 0.75, multiplier: 1 / PHI ** 1.25 }, // gentle glide
     ],
-    // Optional pulse-based caps (e.g., step-downs at φ-transitions converted to pulses)
     phiTransition: [
       { atN: 18, multiplier: 0.92 },
       { atN: 21, multiplier: 0.88 },
-      { atN: 25, multiplier: 0.82 }
+      { atN: 25, multiplier: 0.82 },
     ],
     combine: "min",
-    interpolation: "step"
+    interpolation: "step",
   },
-
-  vow: { earlyUnlockPenalty: 0.5, stewardEpochBeats: 55, stewardSpreadBeats: 21 }
+  vow: { earlyUnlockPenalty: 0.5, stewardEpochBeats: 55, stewardSpreadBeats: 21 },
 };
 
 /* ---------------------------------- context --------------------------------- */
@@ -166,8 +160,8 @@ export type IssuanceContext = {
 
   /** Engagement state (optional, deterministic from your backend) */
   currentStreakDays?: number; // consecutive Kai-days with contribution
-  lifetimeUsdSoFar?: number;  // prior total before this tx
-  plannedHoldBeats?: number;  // if buyer commits to hold; else omit
+  lifetimeUsdSoFar?: number; // prior total before this tx
+  plannedHoldBeats?: number; // if buyer commits to hold; else omit
 
   /** Choir info (neighbors contributing near nowPulse) */
   choirNearby?: Array<{ pulse: number }>;
@@ -180,23 +174,18 @@ export type IssuanceContext = {
 
 type MilestoneCombine = NonNullable<IssuancePolicy["milestones"]>["combine"];
 
-function stepInterp(
-  x: number,
-  entries: Array<{ at: number; multiplier: number }>
-): number {
+function stepInterp(x: number, entries: Array<{ at: number; multiplier: number }>): number {
   // right-continuous step: use last multiplier whose "at" <= x
   let m = 1;
   for (const e of entries) if (x >= e.at) m = e.multiplier;
   return m;
 }
-function linearInterp(
-  x: number,
-  entries: Array<{ at: number; multiplier: number }>
-): number {
+function linearInterp(x: number, entries: Array<{ at: number; multiplier: number }>): number {
   if (!entries.length) return 1;
   if (x <= entries[0].at) return entries[0].multiplier;
   for (let i = 1; i < entries.length; i++) {
-    const a = entries[i - 1], b = entries[i];
+    const a = entries[i - 1],
+      b = entries[i];
     if (x <= b.at) {
       const t = (x - a.at) / Math.max(1e-12, b.at - a.at);
       return a.multiplier + t * (b.multiplier - a.multiplier);
@@ -208,7 +197,6 @@ function combineMilestones(values: number[], how: MilestoneCombine = "min"): num
   if (!values.length) return 1;
   if (how === "min") return Math.min(...values);
   if (how === "max") return Math.max(...values);
-  // "product"
   return values.reduce((s, v) => s * v, 1);
 }
 
@@ -224,7 +212,7 @@ function computeMilestoneMultiplier(
   policy: IssuancePolicy,
   nowPulse: number,
   adoptionNow01: number,
-  pulsesPerBeat: number
+  pulsesPerBeat: number,
 ): { M_milestone: number; next: NextMilestone } {
   const M: number[] = [];
   let next: NextMilestone = null;
@@ -233,46 +221,49 @@ function computeMilestoneMultiplier(
 
   const interp = ms.interpolation ?? "step";
 
-  // Adoption milestones
   if (ms.adoption?.length) {
-    const arr = ms.adoption.slice().sort((a, b) => a.atAdoption - b.atAdoption)
-      .map(e => ({ at: clamp(e.atAdoption, 0, 1), multiplier: e.multiplier }));
+    const arr = ms.adoption
+      .slice()
+      .sort((a, b) => a.atAdoption - b.atAdoption)
+      .map((e) => ({ at: clamp(e.atAdoption, 0, 1), multiplier: e.multiplier }));
     const m = interp === "linear" ? linearInterp(adoptionNow01, arr) : stepInterp(adoptionNow01, arr);
     M.push(m);
-    const nxt = arr.find(e => e.at > adoptionNow01);
+    const nxt = arr.find((e) => e.at > adoptionNow01);
     if (nxt) next = next ?? { kind: "adoption", at: nxt.at, multiplier: nxt.multiplier };
   }
 
-  // Pulse milestones
   if (ms.pulse?.length) {
-    const arr = ms.pulse.slice().sort((a, b) => a.atPulse - b.atPulse)
-      .map(e => ({ at: Math.max(0, Math.trunc(e.atPulse)), multiplier: e.multiplier }));
+    const arr = ms.pulse
+      .slice()
+      .sort((a, b) => a.atPulse - b.atPulse)
+      .map((e) => ({ at: Math.max(0, Math.trunc(e.atPulse)), multiplier: e.multiplier }));
     const m = interp === "linear" ? linearInterp(nowPulse, arr) : stepInterp(nowPulse, arr);
     M.push(m);
-    const nxt = arr.find(e => e.at > nowPulse);
+    const nxt = arr.find((e) => e.at > nowPulse);
     if (nxt && !next) next = { kind: "pulse", at: nxt.at, multiplier: nxt.multiplier };
   }
 
-  // Beat milestones
   if (ms.beat?.length) {
     const beat = Math.floor(nowPulse / pulsesPerBeat);
-    const arr = ms.beat.slice().sort((a, b) => a.atBeat - b.atBeat)
-      .map(e => ({ at: Math.max(0, Math.trunc(e.atBeat)), multiplier: e.multiplier }));
+    const arr = ms.beat
+      .slice()
+      .sort((a, b) => a.atBeat - b.atBeat)
+      .map((e) => ({ at: Math.max(0, Math.trunc(e.atBeat)), multiplier: e.multiplier }));
     const m = interp === "linear" ? linearInterp(beat, arr) : stepInterp(beat, arr);
     M.push(m);
-    const nxt = arr.find(e => e.at > beat);
+    const nxt = arr.find((e) => e.at > beat);
     if (nxt && !next) next = { kind: "beat", at: nxt.at, multiplier: nxt.multiplier };
   }
 
-  // φ-transition milestones
   if (ms.phiTransition?.length) {
-    // Estimate current n from pulse
     const nApprox = Math.floor(Math.log(Math.max(1, nowPulse)) / Math.log(PHI));
-    const arr = ms.phiTransition.slice().sort((a, b) => a.atN - b.atN)
-      .map(e => ({ at: Math.max(1, Math.trunc(e.atN)), multiplier: e.multiplier }));
+    const arr = ms.phiTransition
+      .slice()
+      .sort((a, b) => a.atN - b.atN)
+      .map((e) => ({ at: Math.max(1, Math.trunc(e.atN)), multiplier: e.multiplier }));
     const m = interp === "linear" ? linearInterp(nApprox, arr) : stepInterp(nApprox, arr);
     M.push(m);
-    const nxt = arr.find(e => e.at > nApprox);
+    const nxt = arr.find((e) => e.at > nApprox);
     if (nxt && !next) next = { kind: "phiTransition", at: nxt.at, multiplier: nxt.multiplier };
   }
 
@@ -286,12 +277,13 @@ function choirMultiplierForPulse(
   nowPulse: number,
   stepsPerBeat: number,
   neighbors: Array<{ pulse: number }>,
-  cfg?: IssuancePolicy["choir"]
+  cfg?: IssuancePolicy["choir"],
 ) {
   if (!cfg || !neighbors?.length) return 1;
   const windowP = Math.max(1, cfg.windowPulses);
-  const left = nowPulse - windowP, right = nowPulse + windowP;
-  const choir = neighbors.filter(n => n.pulse >= left && n.pulse <= right);
+  const left = nowPulse - windowP,
+    right = nowPulse + windowP;
+  const choir = neighbors.filter((n) => n.pulse >= left && n.pulse <= right);
   if (!choir.length) return 1;
 
   const meStep = stepIndexFromPulse(nowPulse, stepsPerBeat);
@@ -300,7 +292,7 @@ function choirMultiplierForPulse(
   for (const n of choir) {
     const s = stepIndexFromPulse(n.pulse, stepsPerBeat);
     const r = breathResid(n.pulse);
-    const stepSim   = circSim01(meStep, s, stepsPerBeat);
+    const stepSim = circSim01(meStep, s, stepsPerBeat);
     const breathSim = circSim01(meResid, r, PULSES_PER_STEP);
     const pairSim = (cfg.wStep ?? 0.5) * stepSim + (cfg.wBreath ?? 0.5) * breathSim;
     sum += pairSim;
@@ -310,35 +302,26 @@ function choirMultiplierForPulse(
   return q(1 + gain * (2 * avgSim - 1));
 }
 
-function breathAlignmentMultiplier(
-  nowPulse: number,
-  breathPhase01?: number,
-  cfg?: IssuancePolicy["breath"]
-) {
+function breathAlignmentMultiplier(nowPulse: number, breathPhase01?: number, cfg?: IssuancePolicy["breath"]) {
   if (!cfg || breathPhase01 == null) return 1;
   const resid = breathResid(nowPulse) / PULSES_PER_STEP; // 0..1
   const sim = 1 - Math.abs(((breathPhase01 - resid + 1) % 1) - 0.5) * 2; // 0..1
   return q(1 + (cfg.maxBoost ?? 0) * (2 * sim - 1));
 }
 
-function festivalMultiplier(
-  nowPulse: number,
-  pulsesPerBeat: number,
-  cfg?: IssuancePolicy["festival"]
-) {
+function festivalMultiplier(nowPulse: number, pulsesPerBeat: number, cfg?: IssuancePolicy["festival"]) {
   if (!cfg) return 1;
   const beat = Math.floor(nowPulse / pulsesPerBeat);
   if (cfg.mode === "beatEvery") {
     const k = Math.max(1, Math.trunc(cfg.interval));
     const half = Math.max(0, Math.trunc(cfg.widthBeats));
-    const near = (beat % k === 0) || (Math.abs(beat % k) <= half) || (Math.abs((beat % k) - k) <= half);
+    const near = beat % k === 0 || Math.abs(beat % k) <= half || Math.abs((beat % k) - k) <= half;
     return q(near ? 1 + (cfg.bonus || 0) : 1);
   }
-  // φ-transition mode
   const nApprox = Math.floor(Math.log(Math.max(1, nowPulse)) / Math.log(PHI));
   const sN = Math.ceil(Math.pow(PHI, nApprox));
   const k = Math.max(1, Math.trunc(cfg.interval));
-  const isEvent = (nApprox % k) === 0;
+  const isEvent = nApprox % k === 0;
   const half = Math.max(0, Math.trunc(cfg.widthBeats));
   const eventBeat = Math.floor(sN / pulsesPerBeat);
   const near = Math.abs(beat - eventBeat) <= half;
@@ -349,14 +332,11 @@ function festivalMultiplier(
 
 export type Quote = ReturnType<typeof quotePhiForUsd>;
 
-export function quotePhiForUsd(
-  ctx: IssuanceContext,
-  policy: IssuancePolicy = DEFAULT_ISSUANCE_POLICY
-) {
+export function quotePhiForUsd(ctx: IssuanceContext, policy: IssuancePolicy = DEFAULT_ISSUANCE_POLICY) {
   const { unsigned } = computeIntrinsicUnsigned(ctx.meta, ctx.nowPulse);
   const { premium, inputs } = unsigned;
-  const adoption = inputs.adoptionNow;        // 0..1
-  const rarityScore = inputs.rarityScore01;   // 0..1
+  const adoption = inputs.adoptionNow; // 0..1
+  const rarityScore = inputs.rarityScore01; // 0..1
   const pulsesPerBeat = inputs.pulsesPerBeat;
 
   const usd = Math.max(0, ctx.usd || 0);
@@ -385,19 +365,11 @@ export function quotePhiForUsd(
 
   // (7) lifetime volume tier
   const L = Math.max(0, (ctx.lifetimeUsdSoFar || 0) + usd);
-  const tierBoost = (policy.lifetimeTiers || []).reduce(
-    (acc, t) => (L >= t.thresholdUsd ? Math.max(acc, t.boost) : acc),
-    0
-  );
+  const tierBoost = (policy.lifetimeTiers || []).reduce((acc, t) => (L >= t.thresholdUsd ? Math.max(acc, t.boost) : acc), 0);
   const M_tier = q(1 + tierBoost);
 
   // (8) choir resonance
-  const M_choir = q(choirMultiplierForPulse(
-    ctx.nowPulse,
-    pulsesPerBeat / PULSES_PER_STEP,
-    ctx.choirNearby ?? [],
-    policy.choir
-  ));
+  const M_choir = q(choirMultiplierForPulse(ctx.nowPulse, pulsesPerBeat / PULSES_PER_STEP, ctx.choirNearby ?? [], policy.choir));
 
   // (9) breath-sync alignment
   const M_breath = q(breathAlignmentMultiplier(ctx.nowPulse, ctx.breathPhase01, policy.breath));
@@ -406,14 +378,10 @@ export function quotePhiForUsd(
   const M_festival = q(festivalMultiplier(ctx.nowPulse, pulsesPerBeat, policy.festival));
 
   // (11) milestone step-downs (adoption / pulse / beat / φ-transition)
-  const { M_milestone, next: nextMilestone } =
-    computeMilestoneMultiplier(policy, ctx.nowPulse, adoption, pulsesPerBeat);
+  const { M_milestone, next: nextMilestone } = computeMilestoneMultiplier(policy, ctx.nowPulse, adoption, pulsesPerBeat);
 
   // Combined, fully deterministic multiplier
-  const issuanceMultiplier = q(
-    M_adoption * M_premium * M_moment * sizeMultiplier * M_streak * M_tier *
-    M_choir * M_breath * M_festival * M_milestone
-  );
+  const issuanceMultiplier = q(M_adoption * M_premium * M_moment * sizeMultiplier * M_streak * M_tier * M_choir * M_breath * M_festival * M_milestone);
 
   // Φ per $ and Φ added now as IP
   const phiPerUsd = q(base * issuanceMultiplier);
@@ -445,7 +413,7 @@ export function quotePhiForUsd(
     ? {
         earlyUnlockPenalty: policy.vow.earlyUnlockPenalty,
         stewardEpochBeats: policy.vow.stewardEpochBeats,
-        stewardSpreadBeats: policy.vow.stewardSpreadBeats
+        stewardSpreadBeats: policy.vow.stewardSpreadBeats,
       }
     : null;
 
@@ -458,8 +426,17 @@ export function quotePhiForUsd(
     // state for UI / logs
     issuanceMultiplier,
     multipliers: {
-      M_adoption, M_premium, M_moment, sizeMultiplier, M_streak, M_tier,
-      M_choir, M_breath, M_festival, M_milestone, M_taper
+      M_adoption,
+      M_premium,
+      M_moment,
+      sizeMultiplier,
+      M_streak,
+      M_tier,
+      M_choir,
+      M_breath,
+      M_festival,
+      M_milestone,
+      M_taper,
     },
 
     // holding
@@ -481,48 +458,40 @@ export function quotePhiForUsd(
     valuePhiAfterPV,
 
     // ledger entries you can append to meta.ip.expectedCashflowPhi
-    ipEntries: [
-      { atPulse: ctx.nowPulse, amountPhi: addPhiNow },
-      ...(vestAtPulse ? [{ atPulse: vestAtPulse, amountPhi: q(bonusPhiAtVest) }] : [])
-    ],
+    ipEntries: [{ atPulse: ctx.nowPulse, amountPhi: addPhiNow }, ...(vestAtPulse ? [{ atPulse: vestAtPulse, amountPhi: q(bonusPhiAtVest) }] : [])],
   };
 }
 
 /* -------------------------------- explainers -------------------------------- */
 
 export function explainIssuance(qt: ReturnType<typeof quotePhiForUsd>) {
-  const f = (x: number) => x.toFixed(6).replace(/0+$/,'').replace(/\.$/,'');
+  const f = (x: number) => x.toFixed(6).replace(/0+$/, "").replace(/\.$/, "");
   const chip = (k: string, v: number) => `${k} ×${f(v)}`;
-  const next =
-    qt.nextMilestone
-      ? `Next milestone: ${qt.nextMilestone.kind} @ ${qt.nextMilestone.at} → ×${f(qt.nextMilestone.multiplier)}`
-      : `Next milestone: none`;
+  const next = qt.nextMilestone ? `Next milestone: ${qt.nextMilestone.kind} @ ${qt.nextMilestone.at} → ×${f(qt.nextMilestone.multiplier)}` : `Next milestone: none`;
 
   const holdLine = qt.hold
     ? `Hold bonus (vest @ pulse ${qt.hold.vestAtPulse}): +${f(qt.hold.bonusPhiAtVest)} Φ  (PV now ${f(qt.hold.bonusNowPV)} Φ)`
     : `Hold bonus: none`;
 
-  const vowLine = qt.vow
-    ? `Vow lock: early unlock burns ${Math.round(qt.vow.earlyUnlockPenalty * 100)}% of *unvested* bonus to Steward Pool.`
-    : `Vow lock: none`;
+  const vowLine = qt.vow ? `Vow lock: early unlock burns ${Math.round(qt.vow.earlyUnlockPenalty * 100)}% of *unvested* bonus to Steward Pool.` : `Vow lock: none`;
 
   return [
     `Φ per $: ${f(qt.phiPerUsd)}  (≈ $/Φ ${f(qt.usdPerPhi)})  • multiplier=${f(qt.issuanceMultiplier)}`,
     chip("adoption", qt.multipliers.M_adoption),
     chip("premium", qt.multipliers.M_premium),
-    chip("moment",  qt.multipliers.M_moment),
-    chip("size",    qt.multipliers.sizeMultiplier),
-    chip("streak",  qt.multipliers.M_streak),
-    chip("tier",    qt.multipliers.M_tier),
-    chip("choir",   qt.multipliers.M_choir),
-    chip("breath",  qt.multipliers.M_breath),
-    chip("festival",qt.multipliers.M_festival),
-    chip("milestone",qt.multipliers.M_milestone),
+    chip("moment", qt.multipliers.M_moment),
+    chip("size", qt.multipliers.sizeMultiplier),
+    chip("streak", qt.multipliers.M_streak),
+    chip("tier", qt.multipliers.M_tier),
+    chip("choir", qt.multipliers.M_choir),
+    chip("breath", qt.multipliers.M_breath),
+    chip("festival", qt.multipliers.M_festival),
+    chip("milestone", qt.multipliers.M_milestone),
     `Inhale now: +${f(qt.addPhiNow)} Φ (as IP)`,
     holdLine,
     vowLine,
     `Value before: ${f(qt.valuePhiBefore)} Φ → after (PV): ${f(qt.valuePhiAfterPV)} Φ`,
-    next
+    next,
   ].join("\n");
 }
 
@@ -533,36 +502,37 @@ export function buildExchangeSeries(
   policy: IssuancePolicy,
   startPulse: number,
   endPulse: number,
-  step: number
+  step: number,
 ) {
   const usdSample = Math.max(1, baseCtx.usdSample ?? 100);
   const pts: Array<{
     pulse: number;
     phiPerUsd: number;
     usdPerPhi: number;
-    milestone?: NextMilestone; // if a milestone is hit at this pulse
+    milestone?: NextMilestone;
     choirActive?: boolean;
     festivalActive?: boolean;
   }> = [];
 
   const stepSize = Math.max(1, Math.trunc(step));
   for (let p = Math.trunc(startPulse); p <= Math.trunc(endPulse); p += stepSize) {
-    const q = quotePhiForUsd({ ...baseCtx, nowPulse: p, usd: usdSample }, policy);
+    const qt = quotePhiForUsd({ ...baseCtx, nowPulse: p, usd: usdSample }, policy);
+
     const atMilestone =
-      (policy.milestones?.pulse?.some(m => m.atPulse === p)) ||
+      (policy.milestones?.pulse?.some((m) => m.atPulse === p)) ||
       (phiTransitionIndexFromPulse(p) !== null &&
-        policy.milestones?.phiTransition?.some(m => {
+        policy.milestones?.phiTransition?.some((m) => {
           const n = phiTransitionIndexFromPulse(p);
           return n != null && m.atN === n;
         }));
 
     pts.push({
       pulse: p,
-      phiPerUsd: q.phiPerUsd,
-      usdPerPhi: q.usdPerPhi,
-      milestone: atMilestone ? q.nextMilestone : undefined,
-      choirActive: (q.multipliers.M_choir > 1.0),
-      festivalActive: (q.multipliers.M_festival > 1.0)
+      phiPerUsd: qt.phiPerUsd,
+      usdPerPhi: qt.usdPerPhi,
+      milestone: atMilestone ? qt.nextMilestone : undefined,
+      choirActive: qt.multipliers.M_choir > 1.0,
+      festivalActive: qt.multipliers.M_festival > 1.0,
     });
   }
   return pts;
@@ -571,20 +541,19 @@ export function buildExchangeSeries(
 /* ---------------------------- compact UI summaries -------------------------- */
 
 export function composeHud(qt: Quote) {
-  // Minimal, UI-friendly snapshot for a live HUD
   return {
     price: { phiPerUsd: qt.phiPerUsd, usdPerPhi: qt.usdPerPhi },
     chips: {
       adoption: qt.multipliers.M_adoption,
       premium: qt.multipliers.M_premium,
-      moment:  qt.multipliers.M_moment,
-      size:    qt.multipliers.sizeMultiplier,
-      streak:  qt.multipliers.M_streak,
-      tier:    qt.multipliers.M_tier,
-      choir:   qt.multipliers.M_choir,
-      breath:  qt.multipliers.M_breath,
-      festival:qt.multipliers.M_festival,
-      milestone: qt.multipliers.M_milestone
+      moment: qt.multipliers.M_moment,
+      size: qt.multipliers.sizeMultiplier,
+      streak: qt.multipliers.M_streak,
+      tier: qt.multipliers.M_tier,
+      choir: qt.multipliers.M_choir,
+      breath: qt.multipliers.M_breath,
+      festival: qt.multipliers.M_festival,
+      milestone: qt.multipliers.M_milestone,
     },
     vow: qt.vow,
     hold: qt.hold,
@@ -592,30 +561,18 @@ export function composeHud(qt: Quote) {
     context: {
       premium: qt.premium,
       adoption: qt.adoption,
-      rarityScore: qt.rarityScore
-    }
+      rarityScore: qt.rarityScore,
+    },
   };
 }
 
 /* ------------------------------- simple badges ------------------------------ */
 
-export type EarnedBadge =
-  | "FIB-CLAIM"
-  | "PAL-TX"
-  | "CHOIR-5"
-  | "VOW-FULFILLED"
-  | "STEWARD-STAR";
+export type EarnedBadge = "FIB-CLAIM" | "PAL-TX" | "CHOIR-5" | "VOW-FULFILLED" | "STEWARD-STAR";
 
-export function deriveBadges(
-  claimPulse: number,
-  choirCountInWindow: number,
-  medianHoldBeats: number,
-  vowFulfilled: boolean
-): EarnedBadge[] {
+export function deriveBadges(claimPulse: number, choirCountInWindow: number, medianHoldBeats: number, vowFulfilled: boolean): EarnedBadge[] {
   const out: EarnedBadge[] = [];
-  // Fibonacci claim?
   if (isFibonacciExact(claimPulse)) out.push("FIB-CLAIM");
-  // Palindrome claim?
   const s = Math.abs(Math.trunc(claimPulse)).toString();
   if (s.length > 1 && s === s.split("").reverse().join("")) out.push("PAL-TX");
   if (choirCountInWindow >= 5) out.push("CHOIR-5");
@@ -635,12 +592,95 @@ function isFibonacciExact(pulse: number): boolean {
 function bigintSqrt(n: bigint): bigint {
   if (n < 0n) throw new Error("sqrt of negative");
   if (n < 2n) return n;
-  let x0 = n, x1 = (n >> 1n) + 1n;
-  while (x1 < x0) { x0 = x1; x1 = (x1 + n / x1) >> 1n; }
+  let x0 = n,
+    x1 = (n >> 1n) + 1n;
+  while (x1 < x0) {
+    x0 = x1;
+    x1 = (x1 + n / x1) >> 1n;
+  }
   return x0;
 }
 function isPerfectSquareBig(n: bigint): boolean {
   if (n < 0n) return false;
   const r = bigintSqrt(n);
   return r * r === n;
+}
+
+/* -------------------- REQUIRED EXPORTS FOR PositionSigilMint -------------------- */
+
+export type UsdPerPhiAtMint = Readonly<{
+  usdPerPhi: number;
+  phiPerUsd: number;
+  source: "market" | "issuance";
+  computedAtPulse: number;
+}>;
+
+/**
+ * Compute USD/Φ at mint time.
+ * Priority:
+ *  - If marketPhi + marketUsd are provided -> implied market rate
+ *  - Else -> deterministic issuance-derived exchange (valuation+issuance policy)
+ */
+export function usdPerPhiAtMint(args: Readonly<{
+  nowPulse: number;
+  meta: SigilMetadataLite;
+  marketPhi?: number;
+  marketUsd?: number;
+  policy?: IssuancePolicy;
+}>): UsdPerPhiAtMint {
+  const nowPulse = Math.trunc(args.nowPulse);
+
+  // Prefer explicit market-implied rate
+  if (typeof args.marketPhi === "number" && typeof args.marketUsd === "number") {
+    const marketPhi = args.marketPhi;
+    const marketUsd = args.marketUsd;
+
+    if (!Number.isFinite(marketPhi) || marketPhi <= 0) throw new Error("Invalid marketPhi.");
+    if (!Number.isFinite(marketUsd) || marketUsd <= 0) throw new Error("Invalid marketUsd.");
+
+    const usdPerPhi = marketUsd / marketPhi;
+    if (!Number.isFinite(usdPerPhi) || usdPerPhi <= 0) throw new Error("Invalid implied USD/Φ from market.");
+
+    return {
+      usdPerPhi,
+      phiPerUsd: 1 / usdPerPhi,
+      source: "market",
+      computedAtPulse: nowPulse,
+    };
+  }
+
+  // Deterministic issuance-derived rate (quote $1)
+  const policy = args.policy ?? DEFAULT_ISSUANCE_POLICY;
+
+  const qt = quotePhiForUsd(
+    {
+      meta: args.meta,
+      nowPulse,
+      usd: 1,
+    },
+    policy,
+  );
+
+  if (!Number.isFinite(qt.phiPerUsd) || qt.phiPerUsd <= 0) {
+    throw new Error("Issuance produced invalid Φ/$ (cannot compute USD/Φ).");
+  }
+
+  const usdPerPhi = 1 / qt.phiPerUsd;
+  if (!Number.isFinite(usdPerPhi) || usdPerPhi <= 0) {
+    throw new Error("Issuance produced invalid $/Φ (cannot compute USD/Φ).");
+  }
+
+  return {
+    usdPerPhi,
+    phiPerUsd: qt.phiPerUsd,
+    source: "issuance",
+    computedAtPulse: nowPulse,
+  };
+}
+
+/** Convenience: USD value of a Φ amount using a USD-per-Φ rate. */
+export function usdValueFromPhi(phiAmount: number, usdPerPhi: number): number {
+  if (!Number.isFinite(phiAmount) || phiAmount < 0) return 0;
+  if (!Number.isFinite(usdPerPhi) || usdPerPhi <= 0) return 0;
+  return phiAmount * usdPerPhi;
 }

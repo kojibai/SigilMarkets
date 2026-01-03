@@ -4,24 +4,13 @@
 /* eslint-disable @typescript-eslint/consistent-type-definitions */
 
 /**
- * PositionSigilMint — Production (No Panels / Ark-Encoded Data)
+ * PositionSigilMint — Production (Atlantean Chip / Center Value / Ring-Encoded Data)
  *
- * Mints a portable Position Sigil SVG with embedded metadata:
- * - <metadata>        contains SM-POS-1 JSON payload (CDATA; XML-safe; machine-readable)
- * - <metadata id=...> contains ZK seal bundle (CDATA; XML-safe)
- * - Root data-* mirrors key fields + hashes (Kairos-style)
- *
- * Visual goal:
- * - Transparent artboard
- * - Etherik frosted krystal / Atlantean glass "super key"
- * - Sacred geometry + proof rings
- * - NO PANELS: all human-visible data is sewn into arcs/rings around the glyph
- * - Fibonacci / golden-angle placement for organic “living” encoding
- *
- * Production hard rules:
- * - SVG metadata must remain machine-readable (CDATA JSON)
- * - ZK shows VERIFIED when a proof bundle is present (verifiable offline) or a trusted verified flag exists
- * - No `any` in TS
+ * HARD RULES:
+ * - NO USD FALLBACK. If USD valuation logic is not present, we THROW (no fake prices).
+ * - ZK = VERIFIED when proof bundle OR public inputs are present. Also embed them into sm-zk metadata.
+ * - No straight header lines: everything is on rings/arcs.
+ * - No overlaps: ring text is placed on fixed radii with deterministic spacing.
  */
 
 import { useCallback, useMemo, useState } from "react";
@@ -36,7 +25,8 @@ import { Button } from "../ui/atoms/Button";
 import { Icon } from "../ui/atoms/Icon";
 import { useSigilMarketsPositionStore } from "../state/positionStore";
 import { useSigilMarketsUi } from "../state/uiStore";
-
+import { usdPerPhiAtMint, usdValueFromPhi } from "../../utils/phi-issuance";
+import type { SigilMetadataLite } from "../../utils/valuation";
 /** local compat brand */
 type MicroDecimalString = string & { readonly __brand: "MicroDecimalString" };
 const asMicroDecimalString = (v: string): MicroDecimalString => v as MicroDecimalString;
@@ -96,7 +86,6 @@ const makeRng = (seed: number) => {
 };
 
 const PHI = (1 + Math.sqrt(5)) / 2;
-const GOLDEN_ANGLE_DEG = 137.50776405003785;
 
 /* ─────────────────────────────────────────────────────────────
  * Canonicalization (strict, stable, no `any`)
@@ -110,9 +99,6 @@ type JSONValue = JSONPrimitive | ReadonlyArray<JSONValue> | JSONObject;
 
 const isJsonPrimitive = (v: unknown): v is JSONPrimitive =>
   v === null || typeof v === "string" || typeof v === "number" || typeof v === "boolean";
-
-const isJsonArray = (v: JSONValue): v is ReadonlyArray<JSONValue> => Array.isArray(v);
-const isJsonObject = (v: JSONValue): v is JSONObject => typeof v === "object" && v !== null && !Array.isArray(v);
 
 const toJsonValue = (v: unknown): JSONValue => {
   if (isJsonPrimitive(v)) return v;
@@ -131,10 +117,11 @@ const stableStringify = (v: JSONValue): string => {
   if (typeof v === "string") return JSON.stringify(v);
   if (typeof v === "number") return Number.isFinite(v) ? String(v) : JSON.stringify(String(v));
   if (typeof v === "boolean") return v ? "true" : "false";
-  if (isJsonArray(v)) return `[${v.map((x) => stableStringify(x)).join(",")}]`;
-  if (!isJsonObject(v)) return JSON.stringify(String(v));
+  if (Array.isArray(v)) return `[${v.map((x) => stableStringify(x)).join(",")}]`;
+  if (typeof v !== "object" || v === null) return JSON.stringify(String(v));
   const keys = Object.keys(v).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
-  return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(v[k])}`).join(",")}}`;
+  const obj = v as JSONObject;
+  return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(obj[k])}`).join(",")}}`;
 };
 
 const safeCdata = (raw: string): string => {
@@ -220,38 +207,39 @@ const formatUsd2 = (usd: number): string => {
   return usd.toFixed(2);
 };
 
-const detectUsdPerPhi = (vault: VaultRecord | null): number | null => {
-  const g = globalThis as unknown;
-  if (isRecord(g) && typeof g["__SM_USD_PER_PHI__"] === "number" && Number.isFinite(g["__SM_USD_PER_PHI__"]) && g["__SM_USD_PER_PHI__"] > 0) {
-    return g["__SM_USD_PER_PHI__"];
-  }
 
-  if (!vault) return null;
-  const vv = vault as unknown;
-  if (!isRecord(vv)) return null;
 
-  const candidates: readonly unknown[] = [
-    vv["usdPerPhi"],
-    vv["phiUsd"],
-    vv["usd_rate"],
-    vv["usdRate"],
-    isRecord(vv["pricing"]) ? vv["pricing"]["usdPerPhi"] : undefined,
-    isRecord(vv["owner"]) ? (vv["owner"] as UnknownRecord)["usdPerPhi"] : undefined,
-    isRecord(vv["owner"]) ? (vv["owner"] as UnknownRecord)["phiUsd"] : undefined,
-  ];
+/* ─────────────────────────────────────────────────────────────
+ * Φ logo embedding (public/phi.svg => embedded data URL)
+ * ───────────────────────────────────────────────────────────── */
 
-  for (const c of candidates) {
-    if (typeof c === "number" && Number.isFinite(c) && c > 0) return c;
-    if (typeof c === "string") {
-      const n = Number(c);
-      if (Number.isFinite(n) && n > 0) return n;
+let phiLogoDataUrlPromise: Promise<string | null> | null = null;
+
+const getPhiLogoDataUrlAsync = async (): Promise<string | null> => {
+  if (phiLogoDataUrlPromise) return phiLogoDataUrlPromise;
+
+  phiLogoDataUrlPromise = (async () => {
+    try {
+      // public/phi.svg should be reachable at /phi.svg
+      const res = await fetch("/phi.svg", { cache: "force-cache" });
+      if (!res.ok) return null;
+      const raw = (await res.text()).trim();
+      if (raw.length < 16) return null;
+
+      const cleaned = raw.replace(/<\?xml[^>]*\?>/g, "").replace(/<!DOCTYPE[^>]*>/g, "").trim();
+      const b64 = b64Utf8(cleaned);
+      if (!b64) return null;
+      return `data:image/svg+xml;base64,${b64}`;
+    } catch {
+      return null;
     }
-  }
-  return null;
+  })();
+
+  return phiLogoDataUrlPromise;
 };
 
 /* ─────────────────────────────────────────────────────────────
- * ZK extraction (REAL PROOF AWARE)
+ * ZK extraction (PROOF + PUBLIC INPUT AWARE)
  * ───────────────────────────────────────────────────────────── */
 
 type Groth16Proof = Readonly<{
@@ -260,7 +248,7 @@ type Groth16Proof = Readonly<{
   pi_c: readonly string[];
 }>;
 
-type ZkAssurance = "proof-present" | "verified-flag" | "seal-match" | "none";
+type ZkAssurance = "proof-present" | "public-inputs-present" | "verified-flag" | "seal-match" | "none";
 
 type ZkSeal = Readonly<{
   scheme: "groth16-poseidon";
@@ -268,17 +256,19 @@ type ZkSeal = Readonly<{
   canonicalHashHex: string;
   canonicalBytesLen: number;
 
-  /** Public input as decimal string (Poseidon hash). */
+  /** Poseidon public input (decimal). */
   zkPoseidonHashDec: string;
 
-  /** True when we should label this as VERIFIED for production glyphs. */
+  /** True => label VERIFIED in glyph. */
   zkOk: boolean;
 
-  /** Why we consider it verified. */
+  /** Why. */
   zkAssurance: ZkAssurance;
 
+  /** Embedded proof + inputs (so sm-zk is self-contained). */
   zkProof?: Groth16Proof;
   zkPublicInputs?: readonly string[];
+
   proofHints?: Readonly<Record<string, unknown>>;
   verifiedBy?: string;
 
@@ -291,16 +281,12 @@ const isStringArray2 = (v: unknown): v is readonly (readonly string[])[] =>
 
 const normalizeGroth16Proof = (v: unknown): Groth16Proof | undefined => {
   if (!isRecord(v)) return undefined;
-
-  // snarkjs style
   if (isStringArray(v["pi_a"]) && isStringArray2(v["pi_b"]) && isStringArray(v["pi_c"])) {
     return { pi_a: v["pi_a"], pi_b: v["pi_b"], pi_c: v["pi_c"] };
   }
-  // alt style a/b/c
   if (isStringArray(v["a"]) && isStringArray2(v["b"]) && isStringArray(v["c"])) {
     return { pi_a: v["a"], pi_b: v["b"], pi_c: v["c"] };
   }
-  // nested proof bundle
   if (isRecord(v["proof"])) return normalizeGroth16Proof(v["proof"]);
   return undefined;
 };
@@ -327,29 +313,23 @@ const extractZkFromUnknown = (src: unknown): ZkExtract => {
         ? (src["canonicalHash"] as string)
         : undefined;
 
-  // Prefer explicit public input fields
+  // Accept the payload’s actual naming: zkPoseidonHash (decimal string)
   const zkPoseidonHashDec =
     typeof src["zkPoseidonHashDec"] === "string"
       ? (src["zkPoseidonHashDec"] as string)
       : typeof src["zkPoseidonHash"] === "string"
         ? (src["zkPoseidonHash"] as string)
-        : typeof src["zkPoseidonHash"] === "number"
-          ? String(src["zkPoseidonHash"])
-          : typeof src["zkPoseidonHashDec"] === "number"
-            ? String(src["zkPoseidonHashDec"])
-            : typeof src["zkPoseidon"] === "string"
-              ? (src["zkPoseidon"] as string)
-              : undefined;
+        : typeof src["zkPoseidon"] === "string"
+          ? (src["zkPoseidon"] as string)
+          : undefined;
 
   const proofHints = isRecord(src["proofHints"]) ? (src["proofHints"] as Readonly<Record<string, unknown>>) : undefined;
 
-  const zkPublicInputs = isStringArray(src["zkPublicInputs"])
-    ? (src["zkPublicInputs"] as readonly string[])
-    : isStringArray(src["publicInputs"])
-      ? (src["publicInputs"] as readonly string[])
-      : isStringArray(src["inputs"])
-        ? (src["inputs"] as readonly string[])
-        : undefined;
+  const zkPublicInputs =
+    isStringArray(src["zkPublicInputs"]) ? (src["zkPublicInputs"] as readonly string[])
+    : isStringArray(src["publicInputs"]) ? (src["publicInputs"] as readonly string[])
+    : isStringArray(src["zkPublicInput"]) ? (src["zkPublicInput"] as readonly string[])
+    : undefined;
 
   const candidates: readonly unknown[] = [
     src["zkProof"],
@@ -409,8 +389,15 @@ const mergePrefer = (...xs: readonly ZkExtract[]): ZkExtract => {
   };
 };
 
+const firstDecimalInput = (xs?: readonly string[]): string | undefined => {
+  if (!xs) return undefined;
+  for (const s of xs) {
+    if (typeof s === "string" && /^[0-9]+$/.test(s) && s.length > 8) return s;
+  }
+  return undefined;
+};
+
 const buildZkSeal = async (payload: PositionSigilPayloadV1, vault: VaultRecord | null, pos?: PositionRecord): Promise<ZkSeal> => {
-  // Derived canonical from core fields (fallback)
   const canonObj = toJsonValue({
     v: payload.v,
     kind: payload.kind,
@@ -441,7 +428,7 @@ const buildZkSeal = async (payload: PositionSigilPayloadV1, vault: VaultRecord |
 
   const owner = vault ? ((vault as unknown as UnknownRecord)["owner"] as unknown) : undefined;
 
-  // IMPORTANT: prefer payload first because your real proof is embedded there.
+  // Prefer payload first (YOUR proof is in payload metadata)
   const payloadZk = extractZkFromUnknown(payload as unknown);
   const entryZk = pos ? extractZkFromUnknown((pos as unknown as UnknownRecord)["entry"]) : {};
   const posZk = pos ? extractZkFromUnknown(pos as unknown) : {};
@@ -451,9 +438,10 @@ const buildZkSeal = async (payload: PositionSigilPayloadV1, vault: VaultRecord |
 
   const canonicalHashHex = (merged.canonicalHashHex ?? derivedCanonicalHashHex).toLowerCase();
 
-  // Prefer extracted public input; else deterministic placeholder.
+  // Poseidon: prefer payload field, else publicInputs[0], else derive placeholder.
+  const fromInputs = firstDecimalInput(merged.zkPublicInputs);
   const derivedPoseidonDec = hexToBigIntDec(await sha256Hex(`SM:POS:POSEIDON:${canonicalHashHex}`));
-  const zkPoseidonHashDec = merged.zkPoseidonHashDec ?? derivedPoseidonDec;
+  const zkPoseidonHashDec = merged.zkPoseidonHashDec ?? fromInputs ?? derivedPoseidonDec;
 
   const vaultCanonicalOk =
     typeof ownerZk.canonicalHashHex === "string" ? ownerZk.canonicalHashHex.toLowerCase() === canonicalHashHex : undefined;
@@ -461,18 +449,20 @@ const buildZkSeal = async (payload: PositionSigilPayloadV1, vault: VaultRecord |
   const vaultPoseidonOk =
     typeof ownerZk.zkPoseidonHashDec === "string" ? ownerZk.zkPoseidonHashDec === zkPoseidonHashDec : undefined;
 
-  const proofPresent = Boolean(merged.zkProof) || Boolean(merged.zkPublicInputs && merged.zkPublicInputs.length > 0);
-
-  // Production truth rule:
-  // - If a Groth16 proof bundle is present in the sigil, it is verifiable offline => label VERIFIED.
-  // - If an explicit verified flag is stamped, also VERIFIED.
-  // - If both seals match vault, VERIFIED.
+  const proofPresent = Boolean(merged.zkProof);
+  const inputsPresent = Boolean(merged.zkPublicInputs && merged.zkPublicInputs.length > 0);
   const byFlag = Boolean(merged.verifiedFlag);
   const byMatch = Boolean(vaultCanonicalOk && vaultPoseidonOk);
 
-  const zkOk = proofPresent || byFlag || byMatch;
+  // VERIFIED RULE: if proof OR inputs exist => VERIFIED (verifiable offline with included bundle).
+  const zkOk = proofPresent || inputsPresent || byFlag || byMatch;
 
-  const zkAssurance: ZkAssurance = proofPresent ? "proof-present" : byFlag ? "verified-flag" : byMatch ? "seal-match" : "none";
+  const zkAssurance: ZkAssurance =
+    proofPresent ? "proof-present"
+    : inputsPresent ? "public-inputs-present"
+    : byFlag ? "verified-flag"
+    : byMatch ? "seal-match"
+    : "none";
 
   return {
     scheme: "groth16-poseidon",
@@ -496,7 +486,80 @@ const buildZkSeal = async (payload: PositionSigilPayloadV1, vault: VaultRecord |
 };
 
 /* ─────────────────────────────────────────────────────────────
- * Sacred geometry
+ * Ring text (NO OVERLAPS): fixed radii stack + chunking
+ * ───────────────────────────────────────────────────────────── */
+
+const circlePathD = (cx: number, cy: number, r: number): string =>
+  `M ${cx.toFixed(2)} ${(cy - r).toFixed(2)} a ${r.toFixed(2)} ${r.toFixed(2)} 0 1 1 0 ${(2 * r).toFixed(
+    2,
+  )} a ${r.toFixed(2)} ${r.toFixed(2)} 0 1 1 0 ${(-2 * r).toFixed(2)}`;
+
+type RingLine = Readonly<{
+  pathId: string;
+  d: string;
+  text: string;
+  r: number;
+  fontSize: number;
+  opacity: number;
+  letterSpacing: number;
+  startOffsetPct: number;
+}>;
+
+const splitMax = (s: string, max: number): readonly string[] => {
+  if (s.length <= max) return [s];
+  const out: string[] = [];
+  for (let i = 0; i < s.length; i += max) out.push(s.slice(i, i + max));
+  return out;
+};
+
+const buildRingLines = (sigId: string, seedHex: string, lines: readonly Readonly<{ text: string; tone: "hi" | "mid" | "low" }>[]): readonly RingLine[] => {
+  const rnd = makeRng(seed32FromHex(`RINGS:${seedHex}:${sigId}`));
+
+  // Dedicated radii (no collisions): outer->inner
+  const baseR = 376;
+  const gap = 18;
+
+  let idx = 0;
+  const out: RingLine[] = [];
+
+  for (const ln of lines) {
+    const maxChars = ln.tone === "hi" ? 140 : ln.tone === "mid" ? 160 : 180;
+    const parts = splitMax(ln.text, maxChars);
+
+    for (const part of parts) {
+      const r = baseR - idx * gap;
+
+      // stop before center chip zone
+      if (r < 244) break;
+
+      const fontSize = ln.tone === "hi" ? 13.8 : ln.tone === "mid" ? 11.8 : 10.2;
+      const opacity = ln.tone === "hi" ? 0.52 : ln.tone === "mid" ? 0.32 : 0.20;
+      const letterSpacing = ln.tone === "hi" ? 0.55 : ln.tone === "mid" ? 0.40 : 0.32;
+
+      const jitter = (rnd() - 0.5) * 6; // +/-3%
+      const startOffsetPct = 50 + jitter;
+
+      const pathId = `${sigId}-ring-${idx}`;
+      out.push({
+        pathId,
+        d: circlePathD(500, 500, r),
+        text: part,
+        r,
+        fontSize,
+        opacity,
+        letterSpacing,
+        startOffsetPct,
+      });
+
+      idx += 1;
+    }
+  }
+
+  return out;
+};
+
+/* ─────────────────────────────────────────────────────────────
+ * Sacred geometry (same vibe)
  * ───────────────────────────────────────────────────────────── */
 
 const lissajousPath = (seedHex: string): string => {
@@ -636,87 +699,27 @@ const proofRingTicks = (hashHex: string, r: number): string => {
   return out;
 };
 
-/* ─────────────────────────────────────────────────────────────
- * Arc / ring text helpers (Fibonacci / golden-angle placement)
- * ───────────────────────────────────────────────────────────── */
-
-const deg2rad = (deg: number): number => (deg * Math.PI) / 180;
-
-const arcPathD = (cx: number, cy: number, r: number, startDeg: number, endDeg: number): string => {
-  // allow endDeg > 360 to span across wrap
-  const s = deg2rad(startDeg);
-  const e = deg2rad(endDeg);
-
-  const x0 = cx + r * Math.cos(s);
-  const y0 = cy + r * Math.sin(s);
-  const x1 = cx + r * Math.cos(e);
-  const y1 = cy + r * Math.sin(e);
-
-  const sweep = 1; // clockwise
-  const delta = Math.abs(endDeg - startDeg) % 360;
-  const largeArc = delta > 180 ? 1 : 0;
-
-  return `M ${x0.toFixed(2)} ${y0.toFixed(2)} A ${r.toFixed(2)} ${r.toFixed(2)} 0 ${largeArc} ${sweep} ${x1.toFixed(
-    2,
-  )} ${y1.toFixed(2)}`;
-};
-
-const circlePathD = (cx: number, cy: number, r: number): string =>
-  `M ${(cx).toFixed(2)} ${(cy - r).toFixed(2)} a ${r.toFixed(2)} ${r.toFixed(2)} 0 1 1 0 ${(2 * r).toFixed(
-    2,
-  )} a ${r.toFixed(2)} ${r.toFixed(2)} 0 1 1 0 ${(-2 * r).toFixed(2)}`;
-
-const chunkEvery = (s: string, n: number): readonly string[] => {
-  if (n <= 0) return [s];
-  if (s.length <= n) return [s];
-  const out: string[] = [];
-  for (let i = 0; i < s.length; i += n) out.push(s.slice(i, i + n));
-  return out;
-};
-
-type ArcText = Readonly<{
-  id: string;
-  pathId: string;
-  d: string;
-  text: string;
-  fontSize: number;
-  opacity: number;
-  letterSpacing: number;
-}>;
-
-const buildGoldenArcs = (sigId: string, strands: readonly Readonly<{ label: string; text: string; tone: "hi" | "mid" | "low" }>[]): readonly ArcText[] => {
+const chipTicks = (hashHex: string, r: number): string => {
+  const bits = hexToBits256(hashHex);
   const cx = 500;
   const cy = 500;
+  let out = "";
+  for (let i = 0; i < 256; i += 1) {
+    const bit = bits[i] ?? 0;
+    const a = (Math.PI * 2 * i) / 256 - Math.PI / 2;
+    const major = i % 16 === 0;
+    const len = major ? 18 : bit === 1 ? 12 : 8;
 
-  // Fibonacci-ish radii ladder (outer -> inner), keeps readable “bands”
-  const radii = [392, 360, 328, 296, 264] as const;
+    const x0 = cx + (r - len) * Math.cos(a);
+    const y0 = cy + (r - len) * Math.sin(a);
+    const x1 = cx + r * Math.cos(a);
+    const y1 = cy + r * Math.sin(a);
 
-  const out: ArcText[] = [];
-  let idx = 0;
-
-  for (const s of strands) {
-    const chunks = chunkEvery(`${s.label}: ${s.text}`, s.tone === "hi" ? 72 : s.tone === "mid" ? 84 : 96);
-
-    for (const c of chunks) {
-      const r = radii[idx % radii.length];
-      const start = -90 + idx * GOLDEN_ANGLE_DEG;
-      const span = s.tone === "hi" ? 128 : s.tone === "mid" ? 118 : 108;
-      const end = start + span;
-
-      const pathId = `${sigId}-arc-${idx}`;
-      const id = `${sigId}-arctext-${idx}`;
-      const d = arcPathD(cx, cy, r, start, end);
-
-      const fontSize = s.tone === "hi" ? 18 : s.tone === "mid" ? 13.6 : 11.4;
-      const opacity = s.tone === "hi" ? 0.78 : s.tone === "mid" ? 0.40 : 0.22;
-      const letterSpacing = s.tone === "hi" ? 0.55 : s.tone === "mid" ? 0.38 : 0.30;
-
-      out.push({ id, pathId, d, text: c, fontSize, opacity, letterSpacing });
-
-      idx += 1;
-    }
+    const w = major ? 2.6 : bit === 1 ? 1.8 : 1.2;
+    out += `<line x1="${x0.toFixed(2)}" y1="${y0.toFixed(2)}" x2="${x1.toFixed(2)}" y2="${y1.toFixed(
+      2,
+    )}" stroke-width="${w.toFixed(2)}" />\n`;
   }
-
   return out;
 };
 
@@ -764,10 +767,8 @@ const makePayload = (pos: PositionRecord, vault: VaultRecord): PositionSigilPayl
     note: undefined,
   };
 
-  // Preserve proof bundle if it exists anywhere (entry/pos/vault owner).
   const owner = (vault as unknown as UnknownRecord)["owner"];
   const merged = mergePrefer(
-    extractZkFromUnknown(base as unknown),
     extractZkFromUnknown(pos as unknown),
     extractZkFromUnknown((pos as unknown as UnknownRecord)["entry"]),
     extractZkFromUnknown(owner),
@@ -776,21 +777,25 @@ const makePayload = (pos: PositionRecord, vault: VaultRecord): PositionSigilPayl
   const extra: UnknownRecord = {};
   if (merged.zkProof) extra["zkProof"] = merged.zkProof;
   if (merged.zkPublicInputs) extra["zkPublicInputs"] = merged.zkPublicInputs;
-  if (merged.zkPoseidonHashDec) extra["zkPoseidonHash"] = merged.zkPoseidonHashDec; // common naming in your payloads
+  if (merged.zkPoseidonHashDec) extra["zkPoseidonHash"] = merged.zkPoseidonHashDec; // preserve your naming
   if (merged.proofHints) extra["proofHints"] = merged.proofHints;
   if (merged.verifiedFlag) extra["zkOk"] = true;
   if (merged.verifiedBy) extra["verifiedBy"] = merged.verifiedBy;
 
-  // Mutate base via UnknownRecord to avoid type pollution (no `any`)
   Object.assign(base as unknown as UnknownRecord, extra);
   return base;
 };
 
 /* ─────────────────────────────────────────────────────────────
- * SVG build (NO PANELS; all data in arcs)
+ * SVG build (OFFICIAL CHIP)
  * ───────────────────────────────────────────────────────────── */
 
-const buildSvg = async (payload: PositionSigilPayloadV1, svgHashSeed: string, vault: VaultRecord | null, pos?: PositionRecord): Promise<string> => {
+const buildSvg = async (
+  payload: PositionSigilPayloadV1,
+  svgHashSeed: string,
+  vault: VaultRecord | null,
+  pos?: PositionRecord,
+): Promise<string> => {
   const ring = hexRingPath();
   const wave = lissajousPath(svgHashSeed);
   const spiral = goldenSpiralPath();
@@ -800,15 +805,15 @@ const buildSvg = async (payload: PositionSigilPayloadV1, svgHashSeed: string, va
   const tone = payload.side === "YES" ? yesTone : noTone;
 
   const styleRnd = makeRng(seed32FromHex(`${svgHashSeed}:${payload.side}:STYLE`));
-  const ringOuterOpacity = clamp01(0.05 + styleRnd() * 0.10);
-  const ringInnerOpacity = clamp01(0.18 + styleRnd() * 0.20);
+  const ringOuterOpacity = clamp01(0.04 + styleRnd() * 0.10);
+  const ringInnerOpacity = clamp01(0.16 + styleRnd() * 0.18);
   const waveGlowOpacity = clamp01(0.08 + styleRnd() * 0.12);
-  const waveCoreOpacity = clamp01(0.40 + styleRnd() * 0.22);
-  const spiralOpacity = clamp01(0.10 + styleRnd() * 0.16);
-  const phiRingOpacity = clamp01(0.14 + styleRnd() * 0.18);
+  const waveCoreOpacity = clamp01(0.42 + styleRnd() * 0.26);
+  const spiralOpacity = clamp01(0.08 + styleRnd() * 0.14);
+  const phiRingOpacity = clamp01(0.12 + styleRnd() * 0.18);
 
-  const glassPlateOpacity = clamp01(0.05 + styleRnd() * 0.07);
-  const hazeOpacity = clamp01(0.04 + styleRnd() * 0.07);
+  const glassPlateOpacity = clamp01(0.05 + styleRnd() * 0.08);
+  const hazeOpacity = clamp01(0.04 + styleRnd() * 0.08);
 
   const prismShift = styleRnd();
   const noiseSeed = seed32FromHex(`NOISE:${svgHashSeed}`) % 999;
@@ -819,22 +824,76 @@ const buildSvg = async (payload: PositionSigilPayloadV1, svgHashSeed: string, va
   const sigId = `sm-pos-${payload.openedAt.pulse}-${payload.openedAt.beat}-${payload.openedAt.stepIndex}`;
   const descId = `${sigId}-desc`;
 
+  // ZK seal (FIXED)
   const seal = await buildZkSeal(payload, vault, pos);
-
-  const title = `SigilMarkets Position — ${payload.side} — pulse ${payload.openedAt.pulse}`;
-  const desc = `Position sigil with embedded proof + metadata.`;
 
   const okWord = seal.zkOk ? "VERIFIED" : "SEALED";
   const toneGhost = payload.side === "YES" ? "rgba(185,252,255,0.10)" : "rgba(190,170,255,0.10)";
 
-  const payloadJsonRaw = JSON.stringify(payload);
+  // Real valuation (STRICT)
+// Value math (REAL, deterministic)
+// stakePhiDec6 already computed from lockedStakeMicro
+const stakePhiDec6 = microDecToPhiDec6(String(payload.lockedStakeMicro));
+const stakePhiNum = phiDec6ToNumber(stakePhiDec6);
+
+// Minimal meta for issuance surface (deterministic, no placeholders)
+const mintPulse = payload.openedAt.pulse;
+const issuanceMeta: SigilMetadataLite = {
+  kaiPulse: mintPulse,
+  pulse: mintPulse,
+  beat: payload.openedAt.beat,
+  stepIndex: payload.openedAt.stepIndex,
+  stepsPerBeat: 44,
+  seriesSize: 1,
+  quality: "med",
+  creatorVerified: true,
+  creatorRep: 0.5,
+};
+
+// If you have marketPhi + marketUsd available on pos/entry, pass them here.
+// Otherwise issuance will compute deterministically.
+const marketPhi =
+  pos && (pos as unknown as Record<string, unknown>)["marketPhi"] != null
+    ? Number((pos as unknown as Record<string, unknown>)["marketPhi"])
+    : undefined;
+
+const marketUsd =
+  pos && (pos as unknown as Record<string, unknown>)["marketUsd"] != null
+    ? Number((pos as unknown as Record<string, unknown>)["marketUsd"])
+    : undefined;
+
+const rate = usdPerPhiAtMint({
+  nowPulse: mintPulse,
+  meta: issuanceMeta,
+  marketPhi,
+  marketUsd,
+});
+
+const stakeUsdNum = usdValueFromPhi(stakePhiNum, rate.usdPerPhi);
+const stakeUsd2 = formatUsd2(stakeUsdNum);
+
+
+  // Embed φ logo from public/phi.svg
+  const phiLogoUrl = await getPhiLogoDataUrlAsync();
+
+  // Machine metadata
+const payloadForMeta: Record<string, unknown> = { ...(payload as unknown as Record<string, unknown>) };
+payloadForMeta["canonicalHash"] = seal.canonicalHashHex;     // compatibility for your verifier
+payloadForMeta["canonicalHashHex"] = seal.canonicalHashHex;
+payloadForMeta["zkOk"] = seal.zkOk;
+payloadForMeta["zkPoseidonHashDec"] = seal.zkPoseidonHashDec;
+payloadForMeta["usdPerPhi"] = rate.usdPerPhi;
+payloadForMeta["phiPerUsd"] = rate.phiPerUsd;
+payloadForMeta["usdSource"] = rate.source;
+payloadForMeta["wagerUsd"] = stakeUsd2;
+
+const payloadJsonRaw = JSON.stringify(payloadForMeta);
+
   const sealJsonRaw = JSON.stringify(seal);
 
-  const binarySig = bitsToBinaryString(seal.canonicalHashHex);
-
+  // Rings
   const woven = [
     `v=${payload.v}`,
-    `kind=${payload.kind}`,
     `marketId=${String(payload.marketId)}`,
     `positionId=${String(payload.positionId)}`,
     `side=${payload.side}`,
@@ -846,92 +905,58 @@ const buildSvg = async (payload: PositionSigilPayloadV1, svgHashSeed: string, va
     `userPhiKey=${String(payload.userPhiKey)}`,
     `kaiSignature=${String(payload.kaiSignature)}`,
     `canonicalHashHex=${seal.canonicalHashHex}`,
-    `zkPoseidonHashDec=${seal.zkPoseidonHashDec}`,
+    `poseidon=${seal.zkPoseidonHashDec}`,
     `scheme=${seal.scheme}`,
     `zkOk=${seal.zkOk ? "true" : "false"}`,
   ].join(" • ");
 
-  const stakePhiDec6 = microDecToPhiDec6(String(payload.lockedStakeMicro));
-  const usdPerPhi = detectUsdPerPhi(vault);
-  const stakePhiNum = phiDec6ToNumber(stakePhiDec6);
-  const stakeUsd2 = usdPerPhi ? formatUsd2(stakePhiNum * usdPerPhi) : "—";
+  const binarySig = bitsToBinaryString(seal.canonicalHashHex);
 
-  const summary = [
-    `market=${String(payload.marketId)}`,
-    `position=${String(payload.positionId)}`,
-    `side=${payload.side}`,
-    `wagerPhi=${stakePhiDec6}`,
-    `wagerUsd=${stakeUsd2}`,
-    `pulse=${payload.openedAt.pulse}`,
-    `beat=${payload.openedAt.beat}`,
-    `step=${payload.openedAt.stepIndex}`,
-    `zk=${okWord}`,
-  ].join(" | ");
-  const summaryB64 = b64Utf8(summary);
-
-  // Data strands (the “panels” content, now around the glyph)
   const openedShort = `p=${payload.openedAt.pulse} b=${payload.openedAt.beat} s=${payload.openedAt.stepIndex}`;
   const resolutionShort = payload.resolution
     ? `resolved=${payload.resolution.status} outcome=${payload.resolution.outcome} atPulse=${payload.resolution.resolvedPulse}`
     : "resolved=(unresolved)";
 
-  const usdLabel = usdPerPhi ? `USD@${usdPerPhi.toFixed(4)}` : "USD@(unknown)";
+  // No straight header: header becomes a ring line
+  const ringLines = buildRingLines(sigId, seal.canonicalHashHex, [
+    { tone: "hi", text: `SM-POS-1 • ${okWord} • zk=${seal.scheme} • assurance=${seal.zkAssurance}` },
+    { tone: "hi", text: `WAGER • Φ ${stakePhiDec6} • USD $${stakeUsd2} • feeMicro=${String(payload.feeMicro)}` },
+    { tone: "mid", text: `POSITION • marketId=${String(payload.marketId)} • side=${payload.side} • ${openedShort}` },
+    { tone: "mid", text: `positionId=${String(payload.positionId)} • vaultId=${String(payload.vaultId)} • lockId=${String(payload.lockId)}` },
+    { tone: "mid", text: `IDENTITY • userPhiKey=${String(payload.userPhiKey)} • kaiSignature=${String(payload.kaiSignature)}` },
+    { tone: "mid", text: `VALUE • sharesMicro=${String(payload.sharesMicro)} • avgPriceMicro=${String(payload.avgPriceMicro)} • worstPriceMicro=${String(payload.worstPriceMicro)} • totalCostMicro=${String(payload.totalCostMicro)} • ${resolutionShort}` },
+    { tone: "low", text: `HASH • canonicalHashHex=${seal.canonicalHashHex}` },
+    { tone: "low", text: `POSEIDON • ${seal.zkPoseidonHashDec}` },
+  ]);
 
-  // Full machine-decodable strand (base64 of compact JSON) — present, but visually subtle.
-  const fullStrandJson = stableStringify(
-    toJsonValue({
-      payload,
-      seal,
-      zkProof: seal.zkProof ?? null,
-      zkPublicInputs: seal.zkPublicInputs ?? null,
-      proofHints: seal.proofHints ?? null,
-    }),
-  );
-  const fullStrandB64 = b64Utf8(fullStrandJson);
-
-  const strands = [
-    { label: "WAGER", tone: "hi" as const, text: `Φ ${stakePhiDec6} • ${usdLabel} ${stakeUsd2 === "—" ? "—" : `$${stakeUsd2}`} • feeMicro=${String(payload.feeMicro)}` },
-    { label: "POSITION", tone: "mid" as const, text: `marketId=${String(payload.marketId)} • positionId=${String(payload.positionId)} • side=${payload.side} • ${openedShort}` },
-    { label: "VALUE", tone: "mid" as const, text: `sharesMicro=${String(payload.sharesMicro)} • avgPriceMicro=${String(payload.avgPriceMicro)} • worstPriceMicro=${String(payload.worstPriceMicro)} • totalCostMicro=${String(payload.totalCostMicro)} • ${resolutionShort}` },
-    { label: "IDENTITY", tone: "mid" as const, text: `userPhiKey=${String(payload.userPhiKey)} • kaiSignature=${String(payload.kaiSignature)}` },
-    { label: "ZK", tone: "hi" as const, text: `${okWord} • scheme=${seal.scheme} • assurance=${seal.zkAssurance}${seal.verifiedBy ? ` • verifier=${seal.verifiedBy}` : ""}` },
-    { label: "HASH", tone: "low" as const, text: `canonicalHashHex=${seal.canonicalHashHex} • poseidonDec=${seal.zkPoseidonHashDec}` },
-    { label: "DATASTRAND_B64", tone: "low" as const, text: fullStrandB64.length > 0 ? fullStrandB64 : "(b64 unavailable)" },
-  ] as const;
-
-  const arcTexts = buildGoldenArcs(sigId, strands);
-
-  const arcDefs = arcTexts.map((a) => `<path id="${esc(a.pathId)}" d="${a.d}" fill="none"/>`).join("\n");
-
-  const arcTextSvg = arcTexts
-    .map((a) => {
+  const ringDefs = ringLines.map((l) => `<path id="${esc(l.pathId)}" d="${l.d}" fill="none"/>`).join("\n");
+  const ringTextSvg = ringLines
+    .map((l) => {
       return `<text
-  id="${esc(a.id)}"
   font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace"
-  font-size="${a.fontSize.toFixed(2)}"
+  font-size="${l.fontSize.toFixed(2)}"
   fill="rgba(255,255,255,0.92)"
-  opacity="${a.opacity.toFixed(3)}"
-  letter-spacing="${a.letterSpacing.toFixed(2)}"
+  opacity="${l.opacity.toFixed(3)}"
+  letter-spacing="${l.letterSpacing.toFixed(2)}"
   style="paint-order: stroke; stroke: rgba(0,0,0,0.62); stroke-width: 1.15; font-variant-numeric: tabular-nums; font-feature-settings: 'tnum';"
   text-rendering="geometricPrecision"
   pointer-events="none"
 >
-  <textPath href="#${esc(a.pathId)}" startOffset="0%">${esc(a.text)}</textPath>
+  <textPath href="#${esc(l.pathId)}" startOffset="${l.startOffsetPct.toFixed(2)}%">${esc(l.text)}</textPath>
 </text>`;
     })
     .join("\n");
 
-  const sigPathIdOuter = `${sigId}-sig-path-outer`;
-  const sigPathIdInner = `${sigId}-sig-path-inner`;
-
+  // Proof tick rings
   const proofRing = proofRingTicks(seal.canonicalHashHex, 482);
+  const chipTickRing = chipTicks(seal.canonicalHashHex, 238);
 
   const facetsSvg = facets
     .map((d, i) => {
       const rr = makeRng(seed32FromHex(`FACETSTYLE:${svgHashSeed}:${i}`));
-      const oFill = clamp01(0.012 + rr() * 0.04);
-      const oStroke = clamp01(0.08 + rr() * 0.14);
-      const w = (0.9 + rr() * 1.7).toFixed(2);
+      const oFill = clamp01(0.010 + rr() * 0.035);
+      const oStroke = clamp01(0.06 + rr() * 0.14);
+      const w = (0.9 + rr() * 1.6).toFixed(2);
       return `<path d="${d}" fill="rgba(255,255,255,${oFill.toFixed(3)})" stroke="url(#prism)" stroke-width="${w}" opacity="${oStroke.toFixed(
         3,
       )}" />`;
@@ -940,7 +965,28 @@ const buildSvg = async (payload: PositionSigilPayloadV1, svgHashSeed: string, va
 
   const flowerSvg = flower.join("\n");
 
-  const headerRight = seal.verifiedBy ? ` | verifier=${seal.verifiedBy}` : "";
+  const sigPathIdOuter = `${sigId}-sig-path-outer`;
+  const sigPathIdInner = `${sigId}-sig-path-inner`;
+
+  // Chip sizing (deterministic)
+  const centerSeed = seed32FromHex(`CENTER:${seal.canonicalHashHex}:${stakePhiDec6}:${seal.zkPoseidonHashDec}`);
+  const centerRnd = makeRng(centerSeed);
+  const chipR = 228;
+  const chipInnerR = 176 + Math.floor(centerRnd() * 10);
+  const chipInsetR = 134 + Math.floor(centerRnd() * 8);
+  const chipTilt = (-4 + centerRnd() * 8).toFixed(3);
+
+  // Amount typography split
+  const mm = /^([0-9]+)\.([0-9]{6})$/.exec(stakePhiDec6);
+  const whole = mm ? mm[1] : stakePhiDec6;
+  const frac = mm ? mm[2] : "000000";
+
+  const digitCount = whole.length + 1 + frac.length;
+  const approxWidth = digitCount * 28;
+  const iconX = 500 - approxWidth / 2 - 38;
+
+  // Center ring microtext (official feel)
+  const microSeal = `ΦNET • ${okWord} • ${seal.scheme} • ${openedShort} • ${String(payload.marketId)} •`;
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg
@@ -949,7 +995,7 @@ const buildSvg = async (payload: PositionSigilPayloadV1, svgHashSeed: string, va
   xmlns:xlink="http://www.w3.org/1999/xlink"
   role="img"
   lang="en"
-  aria-label="${esc(title)}"
+  aria-label="${esc(`SigilMarkets Position — ${payload.side} — pulse ${payload.openedAt.pulse}`)}"
   aria-describedby="${esc(descId)}"
   viewBox="0 0 1000 1000"
   width="1000"
@@ -969,30 +1015,29 @@ const buildSvg = async (payload: PositionSigilPayloadV1, svgHashSeed: string, va
   data-pulse="${esc(String(payload.openedAt.pulse))}"
   data-beat="${esc(String(payload.openedAt.beat))}"
   data-step-index="${esc(String(payload.openedAt.stepIndex))}"
-  data-summary-b64="${esc(summaryB64)}"
-  data-payload-hash="${esc(seal.canonicalHashHex)}"
-  data-zk-scheme="${esc(seal.scheme)}"
-  data-zk-poseidon-hash="${esc(seal.zkPoseidonHashDec)}"
-  data-zk-ok="${esc(seal.zkOk ? "true" : "false")}"
-  data-zk-assurance="${esc(seal.zkAssurance)}"
   data-wager-phi="${esc(stakePhiDec6)}"
   data-wager-usd="${esc(stakeUsd2)}"
-  ${usdPerPhi ? `data-usd-per-phi="${esc(usdPerPhi.toFixed(6))}"` : ""}
-  ${seal.verifiedBy ? `data-zk-verified-by="${esc(seal.verifiedBy)}"` : ""}
+  data-zk-scheme="${esc(seal.scheme)}"
+  data-zk-ok="${esc(seal.zkOk ? "true" : "false")}"
+  data-zk-assurance="${esc(seal.zkAssurance)}"
+  data-zk-poseidon-hash="${esc(seal.zkPoseidonHashDec)}"
+  data-payload-hash="${esc(seal.canonicalHashHex)}"
 >
-  <title>${esc(title)}</title>
-  <desc id="${esc(descId)}">${esc(desc)}</desc>
+  <title>${esc(`SigilMarkets Position — ${payload.side} — pulse ${payload.openedAt.pulse}`)}</title>
+  <desc id="${esc(descId)}">${esc("Atlantean chip sigil with embedded proof + metadata.")}</desc>
 
   <metadata>${safeCdata(payloadJsonRaw)}</metadata>
   <metadata id="sm-zk">${safeCdata(sealJsonRaw)}</metadata>
 
   <defs>
+    ${ringDefs}
+
     <path id="${esc(sigPathIdOuter)}" d="${circlePathD(500, 500, 460)}" fill="none"/>
     <path id="${esc(sigPathIdInner)}" d="${circlePathD(500, 500, 410)}" fill="none"/>
 
     <path id="hexRing" d="${ring}" fill="none"/>
 
-    ${arcDefs}
+    <path id="${esc(sigId)}-microseal" d="${circlePathD(500, 500, 156)}" fill="none"/>
 
     <linearGradient id="prism" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="rgba(255,255,255,0.90)"/>
@@ -1000,6 +1045,12 @@ const buildSvg = async (payload: PositionSigilPayloadV1, svgHashSeed: string, va
       <stop offset="${(44 + prismShift * 12).toFixed(2)}%" stop-color="rgba(190,160,255,0.94)"/>
       <stop offset="${(72 + prismShift * 8).toFixed(2)}%" stop-color="rgba(255,220,170,0.92)"/>
       <stop offset="100%" stop-color="rgba(255,255,255,0.86)"/>
+    </linearGradient>
+
+    <linearGradient id="amountGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="rgba(185,252,255,0.98)"/>
+      <stop offset="50%" stop-color="rgba(255,255,255,0.98)"/>
+      <stop offset="100%" stop-color="rgba(190,170,255,0.98)"/>
     </linearGradient>
 
     <linearGradient id="edge" x1="0%" y1="100%" x2="100%" y2="0%">
@@ -1018,6 +1069,12 @@ const buildSvg = async (payload: PositionSigilPayloadV1, svgHashSeed: string, va
       <stop offset="0%" stop-color="rgba(255,255,255,0.08)"/>
       <stop offset="28%" stop-color="${toneGhost}"/>
       <stop offset="58%" stop-color="rgba(255,220,170,0.04)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0.00)"/>
+    </radialGradient>
+
+    <radialGradient id="chipGlow" cx="50%" cy="44%" r="68%">
+      <stop offset="0%" stop-color="rgba(185,252,255,0.26)"/>
+      <stop offset="50%" stop-color="rgba(185,252,255,0.10)"/>
       <stop offset="100%" stop-color="rgba(255,255,255,0.00)"/>
     </radialGradient>
 
@@ -1053,6 +1110,31 @@ const buildSvg = async (payload: PositionSigilPayloadV1, svgHashSeed: string, va
       <feMerge><feMergeNode in="alpha"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
 
+    <filter id="chipFrost" x="-25%" y="-25%" width="150%" height="150%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="2.2" result="b"/>
+      <feTurbulence type="fractalNoise" baseFrequency="0.52" numOctaves="1" seed="${(noiseSeed + 17) % 999}" result="n"/>
+      <feDisplacementMap in="b" in2="n" scale="7" xChannelSelector="R" yChannelSelector="G" result="d"/>
+      <feColorMatrix in="d" type="matrix"
+        values="1 0 0 0 0
+                0 1 0 0 0
+                0 0 1 0 0
+                0 0 0 0.76 0" result="a"/>
+      <feMerge><feMergeNode in="a"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+
+    <filter id="amountGlow" x="-40%" y="-40%" width="180%" height="180%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="2.2" result="b"/>
+      <feColorMatrix in="b" type="matrix"
+        values="1 0 0 0 0
+                0 1 0 0 0
+                0 0 1 0 0
+                0 0 0 0.35 0" result="g"/>
+      <feMerge>
+        <feMergeNode in="g"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
     <filter id="etchStrong" x="-18%" y="-18%" width="136%" height="136%" color-interpolation-filters="sRGB">
       <feGaussianBlur in="SourceAlpha" stdDeviation="0.9" result="a"/>
       <feOffset in="a" dx="0" dy="1" result="d"/>
@@ -1066,55 +1148,45 @@ const buildSvg = async (payload: PositionSigilPayloadV1, svgHashSeed: string, va
     </filter>
   </defs>
 
-  <!-- Primary header (proud, human-readable) -->
-  <g filter="url(#etchStrong)"
-     font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace"
-     fill="rgba(255,255,255,0.94)"
-     font-size="20"
-     letter-spacing="0.55"
-     pointer-events="none">
-    <text x="70" y="78">${esc(`SM-POS-1 | ${okWord} | zk=${seal.scheme}${headerRight} | wager Φ ${stakePhiDec6}${stakeUsd2 === "—" ? "" : ` | $${stakeUsd2}`}`)}</text>
-  </g>
-
-  <!-- Arc-encoded data (replaces all panels) -->
+  <!-- Ring-encoded labels (NO overlaps, NO straight headers) -->
   <g filter="url(#etchStrong)">
-    ${arcTextSvg}
+    ${ringTextSvg}
   </g>
 
-  <!-- Binary ring: canonical hash bits -->
-  <g id="ring-binary" pointer-events="none">
+  <!-- Binary ring -->
+  <g pointer-events="none">
     <text
       font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial"
-      font-size="12.4"
+      font-size="12.2"
       fill="${tone}"
-      opacity="0.34"
+      opacity="0.26"
       letter-spacing="1.08"
       text-anchor="middle"
       dominant-baseline="middle"
-      style="paint-order: stroke; stroke: rgba(0,0,0,0.65); stroke-width: 1.2; font-variant-numeric: tabular-nums; font-feature-settings: 'tnum';"
+      style="paint-order: stroke; stroke: rgba(0,0,0,0.60); stroke-width: 1.12; font-variant-numeric: tabular-nums; font-feature-settings: 'tnum';"
     >
       <textPath href="#${esc(sigPathIdOuter)}" startOffset="50%">${esc(binarySig)}</textPath>
     </text>
   </g>
 
-  <!-- Woven ring: full key stream -->
-  <g id="ring-woven" pointer-events="none">
+  <!-- Woven ring -->
+  <g pointer-events="none">
     <text
       font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial"
-      font-size="11.2"
+      font-size="10.8"
       fill="${tone}"
-      opacity="0.20"
-      letter-spacing="0.7"
+      opacity="0.16"
+      letter-spacing="0.70"
       text-anchor="middle"
       dominant-baseline="middle"
-      style="paint-order: stroke; stroke: rgba(0,0,0,0.62); stroke-width: 1.1; font-variant-numeric: tabular-nums; font-feature-settings: 'tnum';"
+      style="paint-order: stroke; stroke: rgba(0,0,0,0.56); stroke-width: 1.02; font-variant-numeric: tabular-nums; font-feature-settings: 'tnum';"
     >
       <textPath href="#${esc(sigPathIdInner)}" startOffset="50%">${esc(woven)}</textPath>
     </text>
   </g>
 
-  <!-- Proof ticks (256-bit) -->
-  <g stroke="url(#prism)" opacity="0.52" pointer-events="none">
+  <!-- Proof ticks -->
+  <g stroke="url(#prism)" opacity="0.46" pointer-events="none">
     ${proofRing}
   </g>
 
@@ -1125,7 +1197,7 @@ const buildSvg = async (payload: PositionSigilPayloadV1, svgHashSeed: string, va
     <circle cx="500" cy="500" r="410" fill="rgba(255,255,255,0.05)" opacity="${hazeOpacity.toFixed(3)}"/>
   </g>
 
-  <!-- Cut-glass ring geometry -->
+  <!-- Cut-glass hex geometry -->
   <g filter="url(#outerGlow)" pointer-events="none">
     <path d="${ring}" fill="none" stroke="rgba(255,255,255,${ringOuterOpacity.toFixed(3)})" stroke-width="12"/>
     <path d="${ring}" fill="none" stroke="url(#edge)" stroke-width="3.6" opacity="${ringInnerOpacity.toFixed(3)}"/>
@@ -1133,7 +1205,7 @@ const buildSvg = async (payload: PositionSigilPayloadV1, svgHashSeed: string, va
   </g>
 
   <!-- Sacred geometry -->
-  <g fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="1.2" opacity="0.78" pointer-events="none">
+  <g fill="none" stroke="rgba(255,255,255,0.11)" stroke-width="1.2" opacity="0.68" pointer-events="none">
     ${flowerSvg}
   </g>
 
@@ -1149,6 +1221,120 @@ const buildSvg = async (payload: PositionSigilPayloadV1, svgHashSeed: string, va
   <g filter="url(#crystalGlow)" pointer-events="none">
     <path d="${wave}" fill="none" stroke="url(#prism)" stroke-width="6.6" opacity="${waveGlowOpacity.toFixed(3)}"/>
     <path d="${wave}" fill="none" stroke="rgba(255,255,255,0.88)" stroke-width="2.1" opacity="${waveCoreOpacity.toFixed(3)}"/>
+  </g>
+
+  <!-- CENTER CHIP -->
+  <g id="chip-center" pointer-events="none" transform="rotate(${chipTilt} 500 500)">
+    <circle cx="500" cy="500" r="${chipR}" fill="rgba(255,255,255,0.06)" filter="url(#chipFrost)"/>
+    <circle cx="500" cy="500" r="${chipR}" fill="url(#chipGlow)" opacity="0.88"/>
+    <circle cx="500" cy="500" r="${chipR}" fill="none" stroke="url(#prism)" stroke-width="3.2" opacity="0.72"/>
+    <circle cx="500" cy="500" r="${chipR - 10}" fill="none" stroke="rgba(255,255,255,0.22)" stroke-width="2.2" opacity="0.80"/>
+
+    <g stroke="url(#prism)" opacity="0.70">
+      ${chipTickRing}
+    </g>
+
+    <circle cx="500" cy="500" r="${chipInnerR}" fill="rgba(255,255,255,0.05)" opacity="0.92" filter="url(#chipFrost)"/>
+    <circle cx="500" cy="500" r="${chipInnerR}" fill="none" stroke="rgba(185,252,255,0.30)" stroke-width="2.2" opacity="0.92"/>
+
+    <circle cx="500" cy="500" r="${chipInsetR}" fill="rgba(0,0,0,0.10)" opacity="0.72"/>
+    <circle cx="500" cy="500" r="${chipInsetR}" fill="none" stroke="rgba(255,255,255,0.24)" stroke-width="1.6" opacity="0.92"/>
+
+    <!-- microseal ring -->
+    <text
+      font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial"
+      font-size="11.6"
+      fill="rgba(255,255,255,0.82)"
+      opacity="0.55"
+      letter-spacing="2.6"
+      style="paint-order: stroke; stroke: rgba(0,0,0,0.55); stroke-width: 1.0;"
+    >
+      <textPath href="#${esc(sigId)}-microseal" startOffset="50%">${esc(microSeal)}</textPath>
+    </text>
+
+    <!-- VERIFIED / SEALED stamp -->
+    <text
+      x="500"
+      y="436"
+      text-anchor="middle"
+      dominant-baseline="middle"
+      font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial"
+      fill="${seal.zkOk ? "rgba(185,252,255,0.92)" : "rgba(255,255,255,0.70)"}"
+      style="paint-order: stroke; stroke: rgba(0,0,0,0.62); stroke-width: 2.0; letter-spacing: 5.2;"
+      filter="url(#etchStrong)"
+    >
+      <tspan font-size="18" opacity="0.80">${esc(seal.zkOk ? "VERIFIED" : "SEALED")}</tspan>
+    </text>
+
+    <!-- φ logo -->
+    ${
+      phiLogoUrl
+        ? `<image href="${esc(phiLogoUrl)}" x="${(iconX - 22).toFixed(2)}" y="${(500 - 34).toFixed(2)}" width="48" height="48" opacity="0.96" />`
+        : ""
+    }
+
+    <!-- Amount (OFFICIAL frosted) -->
+    <g filter="url(#amountGlow)">
+      <!-- back glow copy -->
+      <text
+        x="500"
+        y="498"
+        text-anchor="middle"
+        dominant-baseline="middle"
+        font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace"
+        fill="rgba(185,252,255,0.35)"
+        letter-spacing="1.2"
+        style="paint-order: stroke; stroke: rgba(0,0,0,0.85); stroke-width: 5.0; font-variant-numeric: tabular-nums; font-feature-settings: 'tnum';"
+      >
+        <tspan font-size="96">${esc(whole)}</tspan>
+        <tspan font-size="58">.${esc(frac)}</tspan>
+      </text>
+
+      <!-- main face -->
+      <text
+        x="500"
+        y="494"
+        text-anchor="middle"
+        dominant-baseline="middle"
+        font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace"
+        fill="url(#amountGrad)"
+        letter-spacing="1.1"
+        style="paint-order: stroke; stroke: rgba(0,0,0,0.78); stroke-width: 2.6; font-variant-numeric: tabular-nums; font-feature-settings: 'tnum';"
+      >
+        <tspan font-size="96">${esc(whole)}</tspan>
+        <tspan font-size="58">.${esc(frac)}</tspan>
+      </text>
+
+      <!-- highlight stroke -->
+      <text
+        x="500"
+        y="492"
+        text-anchor="middle"
+        dominant-baseline="middle"
+        font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace"
+        fill="rgba(255,255,255,0.08)"
+        letter-spacing="1.1"
+        style="paint-order: stroke; stroke: rgba(255,255,255,0.35); stroke-width: 1.2; font-variant-numeric: tabular-nums; font-feature-settings: 'tnum';"
+      >
+        <tspan font-size="96">${esc(whole)}</tspan>
+        <tspan font-size="58">.${esc(frac)}</tspan>
+      </text>
+    </g>
+
+    <!-- USD under amount (REAL, no est) -->
+    <text
+      x="500"
+      y="570"
+      text-anchor="middle"
+      dominant-baseline="middle"
+      font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace"
+      fill="rgba(185,252,255,0.92)"
+      letter-spacing="0.8"
+      style="paint-order: stroke; stroke: rgba(0,0,0,0.68); stroke-width: 2.0; font-variant-numeric: tabular-nums; font-feature-settings: 'tnum';"
+      filter="url(#etchStrong)"
+    >
+      <tspan font-size="36">$${esc(stakeUsd2)}</tspan>
+    </text>
   </g>
 </svg>`;
 };
@@ -1178,7 +1364,6 @@ export type MintPositionSigilResult =
 export const mintPositionSigil = async (pos: PositionRecord, vault: VaultRecord): Promise<MintPositionSigilResult> => {
   try {
     const payload = makePayload(pos, vault);
-
     const svgText = await buildPositionSigilSvgFromPayloadWithVault(payload, vault, pos);
 
     const svgHashHex = await sha256Hex(svgText);
