@@ -1,4 +1,3 @@
-// SigilMarkets/sigils/InhaleGlyphGate.tsx
 "use client";
 
 /* eslint-disable @typescript-eslint/consistent-type-definitions */
@@ -29,8 +28,9 @@ import { deriveVaultId, sha256Hex } from "../utils/ids";
 import { useSigilMarketsUi } from "../state/uiStore";
 import { useSigilMarketsVaultStore } from "../state/vaultStore";
 
-import type { KaiSignature, SvgHash, UserPhiKey } from "../types/vaultTypes";
-import { asKaiSignature, asSvgHash, asUserPhiKey } from "../types/vaultTypes";
+import type { CanonicalHash, KaiSignature, SvgHash, UserPhiKey } from "../types/vaultTypes";
+import { asCanonicalHash, asKaiSignature, asSvgHash, asUserPhiKey } from "../types/vaultTypes";
+
 import type { PhiMicro } from "../types/marketTypes";
 import { computeIntrinsicUnsigned, type SigilMetadataLite } from "../../utils/valuation";
 import { extractEmbeddedMetaFromSvg, extractProofBundleMetaFromSvg } from "../../utils/sigilMetadata";
@@ -66,8 +66,11 @@ type ParsedIdentity = Readonly<{
   kaiSignature: KaiSignature;
 
   pulse?: number;
-  chakraDay?: string;
-  canonicalHash?: string;
+  chakraDay?: SigilSharePayloadLoose["chakraDay"];
+
+  /** Branded canonical hash (preferred stable identity key). */
+  canonicalHash?: CanonicalHash;
+
   sigilMeta?: SigilMetadataLite;
   sigilPayload?: SigilSharePayloadLoose;
   sigilUrl?: string;
@@ -76,6 +79,36 @@ type ParsedIdentity = Readonly<{
 
 const isString = (v: unknown): v is string => typeof v === "string";
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null;
+
+type ChakraDayName = SigilSharePayloadLoose["chakraDay"];
+
+const isChakraDayName = (v: string): v is ChakraDayName =>
+  v === "Root" ||
+  v === "Sacral" ||
+  v === "Solar Plexus" ||
+  v === "Heart" ||
+  v === "Throat" ||
+  v === "Third Eye" ||
+  v === "Crown";
+
+const normalizeChakraDayName = (v: unknown): ChakraDayName | undefined => {
+  if (!isString(v)) return undefined;
+  const t = v.trim();
+  if (!t) return undefined;
+
+  if (isChakraDayName(t)) return t;
+
+  const k = t.toLowerCase().replace(/\s+/g, " ").trim();
+  if (k === "root") return "Root";
+  if (k === "sacral") return "Sacral";
+  if (k === "solar plexus" || k === "solarplexus") return "Solar Plexus";
+  if (k === "heart") return "Heart";
+  if (k === "throat") return "Throat";
+  if (k === "third eye" || k === "thirdeye") return "Third Eye";
+  if (k === "crown") return "Crown";
+
+  return undefined;
+};
 
 const readFileText = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -108,7 +141,6 @@ const sha256HexBytes = async (buf: ArrayBuffer): Promise<string> => {
   } catch {
     // ignore
   }
-  // fallback: hash the byte string with sha256Hex (string-based); not cryptographically ideal but functional
   const bytes = new Uint8Array(buf);
   return sha256Hex(bytesToHex(bytes));
 };
@@ -154,10 +186,9 @@ const extractAttr = (el: Element, names: readonly string[]): string | null => {
 };
 
 const parseIdentityFromSvg = async (rawSvg: string, precomputedSvgHash?: SvgHash): Promise<ParsedIdentity> => {
-  // Compute svgHash from raw bytes (stable). Prefer a precomputed hash from the *file bytes* when available.
-  const svgHash: SvgHash = precomputedSvgHash ?? asSvgHash(await sha256HexBytes(new TextEncoder().encode(rawSvg).buffer));
+  const svgHash: SvgHash =
+    precomputedSvgHash ?? asSvgHash(await sha256HexBytes(new TextEncoder().encode(rawSvg).buffer));
 
-  // Parse DOM
   const parser = new DOMParser();
   const doc = parser.parseFromString(rawSvg, "image/svg+xml");
   const svg = doc.documentElement;
@@ -166,17 +197,22 @@ const parseIdentityFromSvg = async (rawSvg: string, precomputedSvgHash?: SvgHash
     throw new Error("Not a valid SVG file");
   }
 
-  // 1) Prefer data-* attributes (your existing KaiSigil pattern)
   const userPhiKey =
-    extractAttr(svg, ["data-phikey", "data-phi-key", "data-user-phikey", "data-user-phi-key", "data-phiKey", "data-userPhiKey"]) ??
-    "";
+    extractAttr(svg, [
+      "data-phikey",
+      "data-phi-key",
+      "data-user-phikey",
+      "data-user-phi-key",
+      "data-phiKey",
+      "data-userPhiKey",
+    ]) ?? "";
   const kaiSignature =
     extractAttr(svg, ["data-kai-signature", "data-kaisignature", "data-kaiSignature", "data-kaisig", "data-kai-sig"]) ??
     "";
 
-  // Optional UI fields
   const pulseStr = extractAttr(svg, ["data-pulse", "data-kai-pulse", "data-kaipulse"]);
-  const chakraDay = extractAttr(svg, ["data-chakra-day", "data-chakraDay", "data-chakraday"]) ?? undefined;
+  const chakraDayRaw = extractAttr(svg, ["data-chakra-day", "data-chakraDay", "data-chakraday"]);
+  const chakraDay = normalizeChakraDayName(chakraDayRaw);
 
   let pulse: number | undefined;
   if (pulseStr && /^\d+$/.test(pulseStr)) {
@@ -184,7 +220,6 @@ const parseIdentityFromSvg = async (rawSvg: string, precomputedSvgHash?: SvgHash
     if (Number.isFinite(n)) pulse = Math.max(0, Math.floor(n));
   }
 
-  // 2) If missing, scan <metadata> and <desc> for JSON payloads
   let userPhiKey2 = userPhiKey;
   let kaiSignature2 = kaiSignature;
 
@@ -215,12 +250,8 @@ const parseIdentityFromSvg = async (rawSvg: string, precomputedSvgHash?: SvgHash
       }
       if (!kaiSignature2) {
         const s =
-          extractFirstString(cand, [
-            "kaiSignature",
-            "kaiSig",
-            "proofCapsule.kaiSignature",
-            "capsule.kaiSignature",
-          ]) ?? "";
+          extractFirstString(cand, ["kaiSignature", "kaiSig", "proofCapsule.kaiSignature", "capsule.kaiSignature"]) ??
+          "";
         if (s) kaiSignature2 = s;
       }
     }
@@ -286,15 +317,15 @@ export const InhaleGlyphGate = (props: InhaleGlyphGateProps) => {
         const type = (f.type || "").toLowerCase();
 
         if (type.includes("svg") || f.name.toLowerCase().endsWith(".svg")) {
-          // Use raw file bytes for the canonical svgHash (more stable than re-encoding the string).
           const buf = await readFileAsArrayBuffer(f);
           const bytesHash = asSvgHash(await sha256HexBytes(buf));
 
           const raw = await readFileText(f);
           const p = await parseIdentityFromSvg(raw, bytesHash);
           const vid = await deriveVaultId({ userPhiKey: p.userPhiKey, identitySvgHash: p.svgHash });
+
           let sigilMeta: SigilMetadataLite | undefined;
-          let canonicalHash: string | undefined;
+          let canonicalHash: CanonicalHash | undefined;
           let sigilPayload: SigilSharePayloadLoose | undefined;
           let sigilUrl: string | undefined;
           let valuePhi: number | undefined;
@@ -303,7 +334,7 @@ export const InhaleGlyphGate = (props: InhaleGlyphGateProps) => {
             const res = await verifierValidateMeta(raw);
             if (res.ok) {
               sigilMeta = res.meta;
-              canonicalHash = res.canonical;
+              canonicalHash = asCanonicalHash(String(res.canonical).toLowerCase());
             }
           } catch {
             // ignore validation errors for inhale flow
@@ -328,27 +359,50 @@ export const InhaleGlyphGate = (props: InhaleGlyphGateProps) => {
             const pulse =
               typeof sigilMeta.pulse === "number"
                 ? sigilMeta.pulse
-                : typeof sigilMeta.kaiPulse === "number"
-                ? sigilMeta.kaiPulse
+                : typeof (sigilMeta as { kaiPulse?: unknown }).kaiPulse === "number"
+                ? ((sigilMeta as { kaiPulse?: unknown }).kaiPulse as number)
                 : null;
-            const beat = typeof sigilMeta.beat === "number" ? sigilMeta.beat : null;
-            const stepIndex = typeof sigilMeta.stepIndex === "number" ? sigilMeta.stepIndex : null;
-            const chakraDay = typeof sigilMeta.chakraDay === "string" ? sigilMeta.chakraDay : null;
 
-            if (pulse != null && beat != null && stepIndex != null && chakraDay && canonicalHash) {
-              const exportedAtPulse = (sigilMeta as { exportedAtPulse?: number }).exportedAtPulse;
-              sigilPayload = {
+            const beat =
+              typeof (sigilMeta as { beat?: unknown }).beat === "number"
+                ? ((sigilMeta as { beat?: unknown }).beat as number)
+                : null;
+
+            const stepIndex =
+              typeof (sigilMeta as { stepIndex?: unknown }).stepIndex === "number"
+                ? ((sigilMeta as { stepIndex?: unknown }).stepIndex as number)
+                : null;
+
+            const chakraDayTyped = normalizeChakraDayName((sigilMeta as { chakraDay?: unknown }).chakraDay);
+
+            if (pulse != null && beat != null && stepIndex != null && chakraDayTyped && canonicalHash) {
+              const exportedAtPulse = (sigilMeta as { exportedAtPulse?: unknown }).exportedAtPulse;
+
+              const canonicalHashStr = String(canonicalHash);
+
+              const payload: SigilSharePayloadLoose = {
                 pulse,
                 beat,
                 stepIndex,
-                chakraDay,
-                stepsPerBeat: typeof sigilMeta.stepsPerBeat === "number" ? sigilMeta.stepsPerBeat : ETERNAL_STEPS_PER_BEAT,
-                canonicalHash,
-                kaiSignature: typeof sigilMeta.kaiSignature === "string" ? sigilMeta.kaiSignature : undefined,
-                userPhiKey: typeof sigilMeta.userPhiKey === "string" ? sigilMeta.userPhiKey : undefined,
+                chakraDay: chakraDayTyped,
+                stepsPerBeat:
+                  typeof (sigilMeta as { stepsPerBeat?: unknown }).stepsPerBeat === "number"
+                    ? ((sigilMeta as { stepsPerBeat?: unknown }).stepsPerBeat as number)
+                    : ETERNAL_STEPS_PER_BEAT,
+                canonicalHash: canonicalHashStr,
+                kaiSignature:
+                  typeof (sigilMeta as { kaiSignature?: unknown }).kaiSignature === "string"
+                    ? ((sigilMeta as { kaiSignature?: unknown }).kaiSignature as string)
+                    : undefined,
+                userPhiKey:
+                  typeof (sigilMeta as { userPhiKey?: unknown }).userPhiKey === "string"
+                    ? ((sigilMeta as { userPhiKey?: unknown }).userPhiKey as string)
+                    : undefined,
                 exportedAtPulse: typeof exportedAtPulse === "number" ? exportedAtPulse : undefined,
               };
-              sigilUrl = makeSigilUrlLoose(canonicalHash, sigilPayload);
+
+              sigilPayload = payload;
+              sigilUrl = makeSigilUrlLoose(canonicalHashStr, payload);
             }
           }
 
@@ -365,7 +419,6 @@ export const InhaleGlyphGate = (props: InhaleGlyphGateProps) => {
           return;
         }
 
-        // For now: PNG/JPG unsupported here (wired later via SigilScanner + embedded payload)
         throw new Error("Please inhale an SVG glyph (PNG scanning wires next).");
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Failed to parse glyph";
@@ -380,7 +433,6 @@ export const InhaleGlyphGate = (props: InhaleGlyphGateProps) => {
     if (!parsed || !vaultId) return;
     const valuePhiMicro = toPhiMicro(parsed.valuePhi);
 
-    // Create or activate vault
     vault.createOrActivateVault({
       vaultId,
       owner: {
@@ -409,7 +461,7 @@ export const InhaleGlyphGate = (props: InhaleGlyphGateProps) => {
 
     ui.toast("success", "Glyph inhaled", "Vault activated", { atPulse: now.pulse });
     close();
-  }, [close, enqueueInhaleKrystal, flushInhaleQueue, initialSpendableMicro, now.pulse, parsed, registerSigilUrl, ui, vault, vaultId]);
+  }, [close, initialSpendableMicro, now.pulse, parsed, ui, vault, vaultId]);
 
   const subtitle = useMemo(() => {
     if (reason === "trade") return "Inhale your identity glyph to lock Φ into a position.";
@@ -456,11 +508,20 @@ export const InhaleGlyphGate = (props: InhaleGlyphGateProps) => {
             style={{ display: "none" }}
           />
 
-          <Button variant="primary" onClick={onChooseClick} loading={busy} leftIcon={<Icon name="scan" size={14} tone="cyan" />}>
+          <Button
+            variant="primary"
+            onClick={onChooseClick}
+            loading={busy}
+            leftIcon={<Icon name="scan" size={14} tone="cyan" />}
+          >
             Choose glyph (SVG)
           </Button>
 
-          {fileName ? <div className="sm-small">Selected: {fileName}</div> : <div className="sm-small">Upload your KaiSigil SVG.</div>}
+          {fileName ? (
+            <div className="sm-small">Selected: {fileName}</div>
+          ) : (
+            <div className="sm-small">Upload your KaiSigil SVG.</div>
+          )}
         </div>
 
         {err ? (
@@ -484,19 +545,19 @@ export const InhaleGlyphGate = (props: InhaleGlyphGateProps) => {
 
               <div className="sm-inhale-line">
                 <span className="k">userPhiKey</span>
-                <span className="v mono">{shortHash(parsed.userPhiKey as unknown as string, 12, 8)}</span>
+                <span className="v mono">{shortHash(String(parsed.userPhiKey), 12, 8)}</span>
               </div>
               <div className="sm-inhale-line">
                 <span className="k">kaiSignature</span>
-                <span className="v mono">{shortHash(parsed.kaiSignature as unknown as string, 12, 8)}</span>
+                <span className="v mono">{shortHash(String(parsed.kaiSignature), 12, 8)}</span>
               </div>
               <div className="sm-inhale-line">
                 <span className="k">svgHash</span>
-                <span className="v mono">{shortHash(parsed.svgHash as unknown as string, 12, 8)}</span>
+                <span className="v mono">{shortHash(String(parsed.svgHash), 12, 8)}</span>
               </div>
               <div className="sm-inhale-line">
                 <span className="k">vaultId</span>
-                <span className="v mono">{shortHash(vaultId as unknown as string, 14, 10)}</span>
+                <span className="v mono">{shortHash(String(vaultId), 14, 10)}</span>
               </div>
 
               {parsed.chakraDay ? (
