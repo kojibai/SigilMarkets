@@ -33,7 +33,8 @@ export type IconProps = Readonly<{
   title?: string;
 }>;
 
-const cx = (...parts: Array<string | false | null | undefined>): string => parts.filter(Boolean).join(" ");
+const cx = (...parts: Array<string | false | null | undefined>): string =>
+  parts.filter(Boolean).join(" ");
 
 const glyph = (name: IconName): string => {
   switch (name) {
@@ -103,7 +104,8 @@ const toneClass = (tone: NonNullable<IconProps["tone"]>): string => {
   }
 };
 
-export const Icon = (props: IconProps) => {
+// ✅ Explicit return type breaks the self-referential inference path that triggers TS7022
+export const Icon = (props: IconProps): JSX.Element => {
   const { name, size = 16, tone = "default", className, style, title } = props;
 
   const cls = useMemo(() => cx("sm-ico-core", toneClass(tone), className), [tone, className]);
