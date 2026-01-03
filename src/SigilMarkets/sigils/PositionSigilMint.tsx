@@ -7,18 +7,20 @@
  * PositionSigilMint
  *
  * Mints a portable Position Sigil SVG with embedded metadata:
- * - <metadata> contains SM-POS-1 JSON payload (RAW JSON, not escaped)
- * - <metadata id="sm-zk"> contains ZK + canonical hash seal (RAW JSON / CDATA)
- * - Root data-* mirrors key fields + hashes (like your Kairos sigils)
+ * - <metadata> contains SM-POS-1 JSON payload (as CDATA; XML-safe; machine-readable)
+ * - <metadata id="sm-zk"> contains ZK + canonical hash seal (as CDATA; XML-safe)
+ * - Root data-* mirrors key fields + hashes (Kairos-style)
  *
  * Visual goal:
  * - Transparent artboard
  * - Etherik frosted krystal / Atlantean glass “super key”
  * - Sacred geometry + proof rings
- * - Data is “sewn” into the art:
- *   - Signature ring textPath (binary + hashes) like your Kairos glyph
- *   - Etched glass panels that are part of the geometry (not pasted on)
- *   - No truncation: wrap, scale to fit, never drop content
+ * - Data is SEWN into the art (not stamped):
+ *   - Binary ring (canonical hash bits) via textPath
+ *   - Woven ring (human-readable full key stream) via textPath
+ *   - ZK Tablet (full seal + proof + payload) etched into a central glass panel
+ *   - Bottom panels (position/value/identity/seal) etched into geometry
+ * - No truncation: wrap + auto-scale to fit, never drop content
  */
 
 import { useCallback, useMemo, useState } from "react";
@@ -34,10 +36,7 @@ import { Icon } from "../ui/atoms/Icon";
 import { useSigilMarketsPositionStore } from "../state/positionStore";
 import { useSigilMarketsUi } from "../state/uiStore";
 
-/**
- * Some repos define MicroDecimalString/asMicroDecimalString but do not export them.
- * Keep this file bulletproof + lint-clean.
- */
+/** local compat brand */
 type MicroDecimalString = string & { readonly __brand: "MicroDecimalString" };
 const asMicroDecimalString = (v: string): MicroDecimalString => v as MicroDecimalString;
 
@@ -99,7 +98,6 @@ const PHI = (1 + Math.sqrt(5)) / 2;
 
 /* ─────────────────────────────────────────────────────────────
  * Canonicalization (strict, stable, no `any`)
- * Used to compute machine-readable canonicalHash.
  * ───────────────────────────────────────────────────────────── */
 
 type JSONPrimitive = string | number | boolean | null;
@@ -168,21 +166,17 @@ const hexToBigIntDec = (hex: string): string => {
 };
 
 const safeCdata = (raw: string): string => {
-  // prevent closing the CDATA early
   const safe = raw.replace(/]]>/g, "]]]]><![CDATA[>");
   return `<![CDATA[${safe}]]>`;
 };
 
 const b64Utf8 = (s: string): string => {
-  // Browser-first (use client). Still safe if btoa missing.
   try {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
     const b = (globalThis as unknown as { btoa?: (x: string) => string }).btoa;
     if (typeof b === "function") return b(unescape(encodeURIComponent(s)));
   } catch {
     // ignore
   }
-  // Minimal fallback (not perfect for unicode, but shouldn’t be hit in-browser)
   return "";
 };
 
@@ -241,7 +235,11 @@ const extractOwnerZk = (
         ? owner["zkPoseidonHashDec"]
         : undefined;
 
-  const zkProof = isGroth16Proof(owner["zkProof"]) ? owner["zkProof"] : isGroth16Proof(owner["proof"]) ? owner["proof"] : undefined;
+  const zkProof = isGroth16Proof(owner["zkProof"])
+    ? owner["zkProof"]
+    : isGroth16Proof(owner["proof"])
+      ? owner["proof"]
+      : undefined;
 
   const proofHints = isRecord(owner["proofHints"]) ? (owner["proofHints"] as Readonly<Record<string, unknown>>) : undefined;
 
@@ -376,6 +374,7 @@ const hexRingPath = (): string => {
   return d;
 };
 
+/** Flower of Life (7 circles) */
 const flowerOfLife = (): readonly string[] => {
   const cx = 500;
   const cy = 500;
@@ -391,6 +390,7 @@ const flowerOfLife = (): readonly string[] => {
   return circles;
 };
 
+/** Faceted “krystal shards” (deterministic polygons) */
 const crystalFacets = (seedHex: string): readonly string[] => {
   const rnd = makeRng(seed32FromHex(`FACETS:${seedHex}`));
   const cx = 500;
@@ -429,6 +429,7 @@ const crystalFacets = (seedHex: string): readonly string[] => {
   return paths;
 };
 
+/** Proof ring (256-bit ticks) */
 const proofRingTicks = (hashHex: string, r: number): string => {
   const bits = hexToBits256(hashHex);
   const cx = 500;
@@ -455,7 +456,6 @@ const proofRingTicks = (hashHex: string, r: number): string => {
 
 /* ─────────────────────────────────────────────────────────────
  * Text sewn into etched panels (no truncation)
- * dyAcc is used (layout + data attributes).
  * ───────────────────────────────────────────────────────────── */
 
 type TextLine = Readonly<{ kind: "title" | "label" | "value"; text: string }>;
@@ -499,16 +499,17 @@ const renderTextBlock = (x: number, y: number, lines: readonly TextLine[], panel
   const lineHTitle = 18;
   const lineH = 14.5;
 
+  // dyAcc MUST be used (layout + debug + verifier tooling)
   let dyAcc = 0;
-  const tspans: string[] = [];
 
+  const tspans: string[] = [];
   for (let i = 0; i < lines.length; i += 1) {
     const ln = lines[i];
     const isTitle = ln.kind === "title";
     const fontSize = isTitle ? titleSize : ln.kind === "label" ? labelSize : valueSize;
-    const opacity = ln.kind === "title" ? "0.92" : ln.kind === "label" ? "0.72" : "0.82";
-    const dy = i === 0 ? 0 : isTitle ? lineHTitle : lineH;
+    const opacity = ln.kind === "title" ? "0.92" : ln.kind === "label" ? "0.72" : "0.84";
 
+    const dy = i === 0 ? 0 : isTitle ? lineHTitle : lineH;
     dyAcc += dy;
 
     tspans.push(
@@ -528,10 +529,14 @@ const renderTextBlock = (x: number, y: number, lines: readonly TextLine[], panel
   return `<g data-panel="${esc(panelId)}" data-text-dy="${dataDy}" data-text-scale="${dataScale}"
     transform="translate(${tx} ${ty}) scale(${s}) translate(${-x} ${-y})">
     <text
+      x="${x.toFixed(2)}"
+      y="${y.toFixed(2)}"
+      dominant-baseline="hanging"
       font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace"
-      fill="rgba(255,255,255,0.86)"
+      fill="rgba(255,255,255,0.90)"
       letter-spacing="0.35"
       text-rendering="geometricPrecision"
+      style="paint-order: stroke; stroke: rgba(0,0,0,0.58); stroke-width: 1.15; font-variant-numeric: tabular-nums; font-feature-settings: 'tnum';"
     >${tspans.join("")}</text>
   </g>`;
 };
@@ -576,7 +581,45 @@ const buildPanels = (payload: PositionSigilPayloadV1, seal: ZkSeal): readonly Pa
       }`
     : "(unresolved)";
 
+  const zkProofObj = seal.zkProof ?? null;
+  const zkHintsObj = seal.proofHints ?? null;
+
+  const zkProofJson = stableStringify(toJsonValue(zkProofObj));
+  const zkHintsJson = stableStringify(toJsonValue(zkHintsObj));
+
+  const zkTabletJson = stableStringify(
+    toJsonValue({
+      scheme: seal.scheme,
+      zkOk: seal.zkOk,
+      canonicalHashAlg: seal.canonicalHashAlg,
+      canonicalHashHex: seal.canonicalHashHex,
+      canonicalBytesLen: seal.canonicalBytesLen,
+      zkPoseidonHashDec: seal.zkPoseidonHashDec,
+      matches: seal.matches ?? null,
+      zkProof: zkProofObj,
+      proofHints: zkHintsObj,
+      payload: payload,
+    }),
+  );
+
   return [
+    {
+      id: "zkTablet",
+      title: "ZK TABLET | FULL SEAL",
+      x: 120,
+      y: 255,
+      w: 760,
+      h: 310,
+      fields: [
+        { label: "scheme", value: seal.scheme, wrap: 84 },
+        { label: "zkOk", value: seal.zkOk ? "true" : "false", wrap: 84 },
+        { label: "canonicalHashHex", value: seal.canonicalHashHex, wrap: 84 },
+        { label: "zkPoseidonHashDec", value: seal.zkPoseidonHashDec, wrap: 84 },
+        { label: "zkProof(json)", value: zkProofJson, wrap: 84 },
+        { label: "proofHints(json)", value: zkHintsJson, wrap: 84 },
+        { label: "FULL(json)", value: zkTabletJson, wrap: 84 },
+      ],
+    },
     {
       id: "pos",
       title: "POSITION",
@@ -644,54 +687,6 @@ const buildPanels = (payload: PositionSigilPayloadV1, seal: ZkSeal): readonly Pa
   ] as const;
 };
 
-const renderPanel = (p: PanelSpec, toneGhost: string): string => {
-  const padX = 18;
-  const padY = 22;
-
-  const path = roundedRectPath(p.x, p.y, p.w, p.h, 18);
-  const clipId = `clip_${p.id}`;
-  const glowId = `panelGlow_${p.id}`;
-
-  const lines: TextLine[] = [{ kind: "title", text: p.title }];
-  for (const f of p.fields) lines.push(...fieldLines(f.label, f.value, f.wrap));
-
-  const neededH = calcTextBlockHeight(lines);
-  const availH = Math.max(1, p.h - padY * 2);
-  const rawScale = neededH > availH ? availH / neededH : 1;
-  const scale = Math.max(0.66, Math.min(1, rawScale));
-
-  const textSvg = renderTextBlock(p.x + padX, p.y + padY, lines, p.id, scale);
-
-  return `
-  <defs>
-    <clipPath id="${esc(clipId)}">
-      <path d="${path}"/>
-    </clipPath>
-    <filter id="${esc(glowId)}" x="-25%" y="-25%" width="150%" height="150%" color-interpolation-filters="sRGB">
-      <feGaussianBlur stdDeviation="6" result="b"/>
-      <feColorMatrix in="b" type="matrix"
-        values="1 0 0 0 0
-                0 1 0 0 0
-                0 0 1 0 0
-                0 0 0 0.26 0" result="g"/>
-      <feMerge>
-        <feMergeNode in="g"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
-  </defs>
-
-  <g clip-path="url(#${esc(clipId)})">
-    <path d="${path}" fill="rgba(255,255,255,0.05)" opacity="0.95" filter="url(#panelFrost)"/>
-    <path d="${path}" fill="${toneGhost}" opacity="0.55"/>
-    <path d="${path}" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="1.1"/>
-    <path d="${path}" fill="none" stroke="url(#prism)" stroke-width="0.9" opacity="0.35" filter="url(#${esc(glowId)})"/>
-    <g filter="url(#etchStrong)">
-      ${textSvg}
-    </g>
-  </g>`;
-};
-
 /* ─────────────────────────────────────────────────────────────
  * Payload construction
  * ───────────────────────────────────────────────────────────── */
@@ -738,11 +733,7 @@ const makePayload = (pos: PositionRecord, vault: VaultRecord): PositionSigilPayl
 };
 
 /* ─────────────────────────────────────────────────────────────
- * SVG build (Kairos-style embedding + crystal)
- * Key fixes vs prior versions:
- * - metadata is RAW JSON (not esc()) so parsers can read it again
- * - root has “Kairos-like” data attributes + summary-b64
- * - signature ring uses textPath (data sewn in, not pasted)
+ * SVG build (woven + etched, everything visible)
  * ───────────────────────────────────────────────────────────── */
 
 const buildSvg = (payload: PositionSigilPayloadV1, svgHashSeed: string, seal: ZkSeal): string => {
@@ -755,12 +746,11 @@ const buildSvg = (payload: PositionSigilPayloadV1, svgHashSeed: string, seal: Zk
   const tone = payload.side === "YES" ? yesTone : noTone;
 
   const styleRnd = makeRng(seed32FromHex(`${svgHashSeed}:${payload.side}:STYLE`));
-
   const ringOuterOpacity = clamp01(0.08 + styleRnd() * 0.14);
   const ringInnerOpacity = clamp01(0.22 + styleRnd() * 0.22);
-  const waveGlowOpacity = clamp01(0.10 + styleRnd() * 0.18);
-  const waveCoreOpacity = clamp01(0.62 + styleRnd() * 0.28);
-  const spiralOpacity = clamp01(0.16 + styleRnd() * 0.22);
+  const waveGlowOpacity = clamp01(0.10 + styleRnd() * 0.12);
+  const waveCoreOpacity = clamp01(0.56 + styleRnd() * 0.20);
+  const spiralOpacity = clamp01(0.12 + styleRnd() * 0.16);
   const phiRingOpacity = clamp01(0.18 + styleRnd() * 0.18);
 
   const glassPlateOpacity = clamp01(0.10 + styleRnd() * 0.10);
@@ -772,40 +762,116 @@ const buildSvg = (payload: PositionSigilPayloadV1, svgHashSeed: string, seal: Zk
   const facets = crystalFacets(svgHashSeed);
   const flower = flowerOfLife();
 
-  // IMPORTANT: raw JSON in metadata, like your Kairos sigils
-  const metaJsonRaw = JSON.stringify(payload);
+  const payloadJsonRaw = JSON.stringify(payload);
   const sealJsonRaw = JSON.stringify(seal);
 
   const sigId = `sm-pos-${payload.openedAt.pulse}-${payload.openedAt.beat}-${payload.openedAt.stepIndex}`;
   const descId = `${sigId}-desc`;
 
-  const title = `SigilMarkets Position — ${payload.side} — pulse ${payload.openedAt.pulse}`;
-  const desc = `Deterministic position sigil with embedded proof + metadata. Market ${String(payload.marketId)} Position ${String(
-    payload.positionId,
-  )}.`;
+  const title = `SigilMarkets Position - ${payload.side} - pulse ${payload.openedAt.pulse}`;
+  const desc = `Deterministic position sigil with embedded proof + metadata.`;
 
   const proofRing = proofRingTicks(seal.canonicalHashHex, 482);
 
-  const toneGhost = payload.side === "YES" ? "rgba(185,252,255,0.12)" : "rgba(190,170,255,0.12)";
   const okWord = seal.zkOk ? "VERIFIED" : "SEALED";
+  const toneGhost = payload.side === "YES" ? "rgba(185,252,255,0.12)" : "rgba(190,170,255,0.12)";
 
-  // “Kairos style” signature ring: binary of canonical hash
   const binarySig = bitsToBinaryString(seal.canonicalHashHex);
 
-  // Summary (base64 like data-summary-b64)
-  const summary = `Market ${String(payload.marketId)} • Position ${String(payload.positionId)} • Side ${
-    payload.side
-  } • Stake μΦ ${String(payload.lockedStakeMicro)} • Shares μ ${String(payload.sharesMicro)} • Pulse ${
-    payload.openedAt.pulse
-  }`;
+  const woven = [
+    `v=${payload.v}`,
+    `kind=${payload.kind}`,
+    `marketId=${String(payload.marketId)}`,
+    `positionId=${String(payload.positionId)}`,
+    `side=${payload.side}`,
+    `vaultId=${String(payload.vaultId)}`,
+    `lockId=${String(payload.lockId)}`,
+    `pulse=${payload.openedAt.pulse}`,
+    `beat=${payload.openedAt.beat}`,
+    `stepIndex=${payload.openedAt.stepIndex}`,
+    `userPhiKey=${String(payload.userPhiKey)}`,
+    `kaiSignature=${String(payload.kaiSignature)}`,
+    `marketDefinitionHash=${String(payload.marketDefinitionHash ?? "")}`,
+    `canonicalHashHex=${seal.canonicalHashHex}`,
+    `zkPoseidonHashDec=${seal.zkPoseidonHashDec}`,
+    `scheme=${seal.scheme}`,
+    `zkOk=${seal.zkOk ? "true" : "false"}`,
+  ].join(" | ");
+
+  const summary = [
+    `Market ${String(payload.marketId)}`,
+    `Position ${String(payload.positionId)}`,
+    `Side ${payload.side}`,
+    `StakeMuPhi ${String(payload.lockedStakeMicro)}`,
+    `SharesMu ${String(payload.sharesMicro)}`,
+    `Pulse ${payload.openedAt.pulse}`,
+    `Beat ${payload.openedAt.beat}`,
+    `Step ${payload.openedAt.stepIndex}`,
+  ].join(" | ");
+
   const summaryB64 = b64Utf8(summary);
 
-  // Panels (fully readable, untruncated, etched into glass)
   const panels = buildPanels(payload, seal);
-  const panelSvg = panels.map((p) => renderPanel(p, toneGhost)).join("\n");
 
-  // Outer sig-path like your example (circular path)
-  const sigPathId = `${sigId}-sig-path`;
+  // Build panel SVG here (no separate renderPanel function -> no unused lint)
+  const panelSvg = panels
+    .map((p) => {
+      const isTablet = p.id === "zkTablet";
+      const padX = 18;
+      const padY = 22;
+
+      const path = roundedRectPath(p.x, p.y, p.w, p.h, 18);
+      const clipId = `clip_${p.id}`;
+      const glowId = `panelGlow_${p.id}`;
+
+      const lines: TextLine[] = [{ kind: "title", text: p.title }];
+      for (const f of p.fields) lines.push(...fieldLines(f.label, f.value, f.wrap));
+
+      const neededH = calcTextBlockHeight(lines);
+      const availH = Math.max(1, p.h - padY * 2);
+      const rawScale = neededH > availH ? availH / neededH : 1;
+
+      const minScale = isTablet ? 0.36 : 0.66;
+      const scale = Math.max(minScale, Math.min(1, rawScale));
+
+      const textSvg = renderTextBlock(p.x + padX, p.y + padY, lines, p.id, scale);
+
+      return (
+        `<defs>` +
+        `<clipPath id="${esc(clipId)}"><path d="${path}"/></clipPath>` +
+        `<filter id="${esc(glowId)}" x="-25%" y="-25%" width="150%" height="150%" color-interpolation-filters="sRGB">` +
+        `<feGaussianBlur stdDeviation="6" result="b"/>` +
+        `<feColorMatrix in="b" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.26 0" result="g"/>` +
+        `<feMerge><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>` +
+        `</filter>` +
+        `</defs>` +
+        `<g clip-path="url(#${esc(clipId)})">` +
+        `<path d="${path}" fill="rgba(255,255,255,0.05)" opacity="0.95" filter="url(#panelFrost)"/>` +
+        `<path d="${path}" fill="${toneGhost}" opacity="0.55"/>` +
+        `<path d="${path}" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="1.1"/>` +
+        `<path d="${path}" fill="none" stroke="url(#prism)" stroke-width="0.9" opacity="0.35" filter="url(#${esc(glowId)})"/>` +
+        `<g filter="url(#etchStrong)">${textSvg}</g>` +
+        `</g>`
+      );
+    })
+    .join("\n");
+
+  const sigPathIdOuter = `${sigId}-sig-path-outer`;
+  const sigPathIdInner = `${sigId}-sig-path-inner`;
+
+  const facetsSvg = facets
+    .map((d, i) => {
+      const rr = makeRng(seed32FromHex(`FACETSTYLE:${svgHashSeed}:${i}`));
+      const oFill = clamp01(0.02 + rr() * 0.05);
+      const oStroke = clamp01(0.10 + rr() * 0.18);
+      const w = (0.9 + rr() * 1.9).toFixed(2);
+      return `<path d="${d}" fill="rgba(255,255,255,${oFill.toFixed(3)})" stroke="url(#prism)" stroke-width="${w}" opacity="${oStroke.toFixed(
+        3,
+      )}" />`;
+    })
+    .join("\n");
+
+  const flowerSvg = flower.join("\n");
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg
@@ -821,7 +887,7 @@ const buildSvg = (payload: PositionSigilPayloadV1, svgHashSeed: string, seal: Zk
   height="1000"
   shape-rendering="geometricPrecision"
   preserveAspectRatio="xMidYMid meet"
-  style="background: transparent; cursor: pointer;"
+  style="background: transparent;"
   data-kind="sigilmarkets-position"
   data-v="SM-POS-1"
   data-market-id="${esc(String(payload.marketId))}"
@@ -843,24 +909,20 @@ const buildSvg = (payload: PositionSigilPayloadV1, svgHashSeed: string, seal: Zk
   <title>${esc(title)}</title>
   <desc id="${esc(descId)}">${esc(desc)}</desc>
 
-  <!-- RAW JSON (not escaped): parsers can read it again -->
-  <metadata>${metaJsonRaw}</metadata>
+  <metadata>${safeCdata(payloadJsonRaw)}</metadata>
   <metadata id="sm-zk">${safeCdata(sealJsonRaw)}</metadata>
-  <metadata id="sigil-display">${`{"marketId":${JSON.stringify(String(payload.marketId))},"positionId":${JSON.stringify(
-    String(payload.positionId),
-  )},"side":${JSON.stringify(payload.side)},"pulse":${payload.openedAt.pulse},"beat":${payload.openedAt.beat},"stepIndex":${
-    payload.openedAt.stepIndex
-  }}`}</metadata>
 
   <defs>
-    <!-- Outer signature ring path (Kairos-style) -->
-    <path id="${esc(sigPathId)}" d="M 500 40 a 460 460 0 1 1 0 920 a 460 460 0 1 1 0 -920" fill="none"/>
+    <path id="${esc(sigPathIdOuter)}" d="M 500 40 a 460 460 0 1 1 0 920 a 460 460 0 1 1 0 -920" fill="none"/>
+    <path id="${esc(sigPathIdInner)}" d="M 500 90 a 410 410 0 1 1 0 820 a 410 410 0 1 1 0 -820" fill="none"/>
+
+    <path id="hexRing" d="${ring}" fill="none"/>
 
     <linearGradient id="prism" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%"   stop-color="rgba(255,255,255,0.90)"/>
-      <stop offset="${(16 + prismShift * 10).toFixed(2)}%"  stop-color="rgba(160,255,255,0.92)"/>
+      <stop offset="0%" stop-color="rgba(255,255,255,0.90)"/>
+      <stop offset="${(16 + prismShift * 10).toFixed(2)}%" stop-color="rgba(160,255,255,0.92)"/>
       <stop offset="${(44 + prismShift * 12).toFixed(2)}%" stop-color="rgba(190,160,255,0.94)"/>
-      <stop offset="${(72 + prismShift * 8).toFixed(2)}%"  stop-color="rgba(255,220,170,0.92)"/>
+      <stop offset="${(72 + prismShift * 8).toFixed(2)}%" stop-color="rgba(255,220,170,0.92)"/>
       <stop offset="100%" stop-color="rgba(255,255,255,0.86)"/>
     </linearGradient>
 
@@ -885,116 +947,79 @@ const buildSvg = (payload: PositionSigilPayloadV1, svgHashSeed: string, seal: Zk
 
     <filter id="outerGlow" x="-35%" y="-35%" width="170%" height="170%" color-interpolation-filters="sRGB">
       <feGaussianBlur stdDeviation="10" result="b"/>
-      <feColorMatrix in="b" type="matrix"
-        values="1 0 0 0 0
-                0 1 0 0 0
-                0 0 1 0 0
-                0 0 0 0.30 0" result="g"/>
-      <feMerge>
-        <feMergeNode in="g"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
+      <feColorMatrix in="b" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.30 0" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
 
     <filter id="crystalGlow" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
       <feGaussianBlur stdDeviation="6" result="b"/>
-      <feColorMatrix in="b" type="matrix"
-        values="1 0 0 0 0
-                0 1 0 0 0
-                0 0 1 0 0
-                0 0 0 0.46 0" result="g"/>
-      <feMerge>
-        <feMergeNode in="g"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
+      <feColorMatrix in="b" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.46 0" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
 
     <filter id="frost" x="-25%" y="-25%" width="150%" height="150%" color-interpolation-filters="sRGB">
       <feGaussianBlur in="SourceGraphic" stdDeviation="2.8" result="blur"/>
       <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="${noiseSeed}" result="noise"/>
       <feDisplacementMap in="blur" in2="noise" scale="10" xChannelSelector="R" yChannelSelector="G" result="disp"/>
-      <feColorMatrix in="disp" type="matrix"
-        values="1 0 0 0 0
-                0 1 0 0 0
-                0 0 1 0 0
-                0 0 0 0.74 0" result="alpha"/>
-      <feMerge>
-        <feMergeNode in="alpha"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
+      <feColorMatrix in="disp" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.74 0" result="alpha"/>
+      <feMerge><feMergeNode in="alpha"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
 
     <filter id="panelFrost" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
       <feGaussianBlur stdDeviation="2.0" result="b"/>
       <feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="1" seed="${(noiseSeed + 7) % 999}" result="n"/>
       <feDisplacementMap in="b" in2="n" scale="6" xChannelSelector="R" yChannelSelector="G" result="d"/>
-      <feColorMatrix in="d" type="matrix"
-        values="1 0 0 0 0
-                0 1 0 0 0
-                0 0 1 0 0
-                0 0 0 0.72 0" />
+      <feColorMatrix in="d" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.72 0"/>
     </filter>
 
     <filter id="etchStrong" x="-18%" y="-18%" width="136%" height="136%" color-interpolation-filters="sRGB">
       <feGaussianBlur in="SourceAlpha" stdDeviation="0.9" result="a"/>
       <feOffset in="a" dx="0" dy="1" result="d"/>
       <feComposite in="d" in2="SourceAlpha" operator="out" result="shadow"/>
-      <feColorMatrix in="shadow" type="matrix"
-        values="0 0 0 0 0
-                0 0 0 0 0
-                0 0 0 0 0
-                0 0 0 0.42 0" result="s"/>
-      <feMerge>
-        <feMergeNode in="s"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
+      <feColorMatrix in="shadow" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.42 0" result="s"/>
+      <feMerge><feMergeNode in="s"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
 
-    <clipPath id="hexClip">
-      <path d="${ring}"/>
-    </clipPath>
+    <clipPath id="hexClip"><use href="#hexRing"/></clipPath>
   </defs>
 
-  <!-- Signature ring (SEWN IN, not pasted): binary signature from canonical hash -->
-  <g id="signature" pointer-events="none">
+  <!-- WOVEN RINGS (data lives in the geometry) -->
+  <g id="ring-binary" pointer-events="none">
     <text
       font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial"
-      font-size="12.6"
+      font-size="12.4"
       fill="${tone}"
-      letter-spacing="1.1"
+      opacity="0.36"
+      letter-spacing="1.08"
       text-anchor="middle"
       dominant-baseline="middle"
-      opacity="0.42"
       style="paint-order: stroke; stroke: rgba(0,0,0,0.65); stroke-width: 1.2; font-variant-numeric: tabular-nums; font-feature-settings: 'tnum';"
     >
-      <textPath href="#${esc(sigPathId)}" startOffset="50%">${esc(binarySig)}</textPath>
+      <textPath href="#${esc(sigPathIdOuter)}" startOffset="50%">${esc(binarySig)}</textPath>
     </text>
   </g>
 
-  <!-- Subtle hint line (like your Day Seal hint) -->
-  <g id="signature-hint" aria-hidden="true" pointer-events="none" filter="url(#etchStrong)">
+  <g id="ring-woven" pointer-events="none">
     <text
-      x="60"
-      y="506"
       font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial"
-      font-size="12.8"
+      font-size="11.2"
       fill="${tone}"
-      opacity="0.14"
-      text-anchor="start"
-      lengthAdjust="spacingAndGlyphs"
-      textLength="520"
-      style="paint-order: stroke; stroke: rgba(0,0,0,0.55); stroke-width: 1.2; font-variant-numeric: tabular-nums; font-feature-settings: 'tnum';"
-    >${esc(
-      `Market ${String(payload.marketId)} • Position ${String(payload.positionId)} • Side ${payload.side} • Pulse ${payload.openedAt.pulse}`,
-    )}</text>
+      opacity="0.22"
+      letter-spacing="0.7"
+      text-anchor="middle"
+      dominant-baseline="middle"
+      style="paint-order: stroke; stroke: rgba(0,0,0,0.62); stroke-width: 1.1; font-variant-numeric: tabular-nums; font-feature-settings: 'tnum';"
+    >
+      <textPath href="#${esc(sigPathIdInner)}" startOffset="50%">${esc(woven)}</textPath>
+    </text>
   </g>
 
-  <!-- Proof ring (machine-visible) -->
+  <!-- Proof ticks (machine legible) -->
   <g stroke="url(#prism)" opacity="0.55" pointer-events="none">
     ${proofRing}
   </g>
 
-  <!-- Etherik glass plate (frosted, clipped to hex) -->
+  <!-- Etherik glass plate -->
   <g clip-path="url(#hexClip)" filter="url(#frost)" pointer-events="none">
     <circle cx="500" cy="500" r="520" fill="url(#aurora)" opacity="${(glassPlateOpacity * 0.92).toFixed(3)}"/>
     <circle cx="500" cy="500" r="520" fill="url(#ether)" opacity="${glassPlateOpacity.toFixed(3)}"/>
@@ -1003,53 +1028,43 @@ const buildSvg = (payload: PositionSigilPayloadV1, svgHashSeed: string, seal: Zk
 
   <!-- Cut-glass ring geometry -->
   <g filter="url(#outerGlow)" pointer-events="none">
-    <path d="${ring}" fill="none" stroke="rgba(255,255,255,${ringOuterOpacity.toFixed(3)})" stroke-width="12"/>
-    <path d="${ring}" fill="none" stroke="url(#edge)" stroke-width="3.6" opacity="${ringInnerOpacity.toFixed(3)}"/>
+    <use href="#hexRing" stroke="rgba(255,255,255,${ringOuterOpacity.toFixed(3)})" stroke-width="12"/>
+    <use href="#hexRing" stroke="url(#edge)" stroke-width="3.6" opacity="${ringInnerOpacity.toFixed(3)}"/>
     <circle cx="500" cy="500" r="${(432 / PHI).toFixed(2)}" fill="none" stroke="url(#prism)" stroke-width="1.9" opacity="${phiRingOpacity.toFixed(
       3,
     )}"/>
   </g>
 
-  <!-- Sacred geometry core -->
+  <!-- Sacred geometry -->
   <g clip-path="url(#hexClip)" fill="none" stroke="rgba(255,255,255,0.14)" stroke-width="1.2" opacity="0.85" pointer-events="none">
-    ${flower.join("\n")}
+    ${flowerSvg}
   </g>
 
   <!-- Facets -->
   <g clip-path="url(#hexClip)" pointer-events="none">
-    ${facets
-      .map((d, i) => {
-        const rr = makeRng(seed32FromHex(`FACETSTYLE:${svgHashSeed}:${i}`));
-        const oFill = clamp01(0.02 + rr() * 0.05);
-        const oStroke = clamp01(0.10 + rr() * 0.18);
-        const w = (0.9 + rr() * 1.9).toFixed(2);
-        return `<path d="${d}" fill="rgba(255,255,255,${oFill.toFixed(
-          3,
-        )})" stroke="url(#prism)" stroke-width="${w}" opacity="${oStroke.toFixed(3)}" />`;
-      })
-      .join("\n")}
+    ${facetsSvg}
   </g>
 
-  <!-- Φ spiral -->
+  <!-- Phi spiral -->
   <path d="${spiral}" fill="none" stroke="url(#prism)" stroke-width="1.6" opacity="${spiralOpacity.toFixed(3)}" pointer-events="none"/>
 
   <!-- Wave core -->
   <g filter="url(#crystalGlow)" pointer-events="none">
-    <path d="${wave}" fill="none" stroke="url(#prism)" stroke-width="8" opacity="${waveGlowOpacity.toFixed(3)}"/>
-    <path d="${wave}" fill="none" stroke="rgba(255,255,255,0.90)" stroke-width="2.4" opacity="${waveCoreOpacity.toFixed(3)}"/>
+    <path d="${wave}" fill="none" stroke="url(#prism)" stroke-width="6.6" opacity="${waveGlowOpacity.toFixed(3)}"/>
+    <path d="${wave}" fill="none" stroke="rgba(255,255,255,0.90)" stroke-width="2.1" opacity="${waveCoreOpacity.toFixed(3)}"/>
   </g>
 
-  <!-- Header seal (untruncated, embedded) -->
+  <!-- Header -->
   <g filter="url(#etchStrong)"
      font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace"
      fill="rgba(255,255,255,0.88)"
      font-size="16"
      letter-spacing="0.45"
      pointer-events="none">
-    <text x="95" y="86">${esc(`SM-POS-1 • ${okWord} • zk=${seal.scheme}`)}</text>
+    <text x="95" y="86">${esc(`SM-POS-1 | ${okWord} | zk=${seal.scheme}`)}</text>
   </g>
 
-  <!-- Etched data panels (part of the art; no truncation) -->
+  <!-- PANELS LAST (so text is always visible) -->
   <g clip-path="url(#hexClip)" pointer-events="none">
     ${panelSvg}
   </g>
@@ -1079,14 +1094,12 @@ export const mintPositionSigil = async (pos: PositionRecord, vault: VaultRecord)
   try {
     const payload = makePayload(pos, vault);
 
-    // Deterministic SVG + embedded machine approval + raw metadata + sewn signature ring
+    // Deterministic SVG + embedded machine approval + CDATA metadata + woven rings + etched panels
     const svgText = await buildPositionSigilSvgFromPayloadWithVault(payload, vault);
 
-    // Content-address hash of the final SVG
     const svgHashHex = await sha256Hex(svgText);
     const svgHash = asSvgHash(svgHashHex);
 
-    // Deterministic sigil id derived from (positionId + stable ref)
     const rawSigilId = await derivePositionSigilId({ positionId: pos.id, ref: svgHashHex.slice(0, 24) });
     const sigilId = asPositionSigilId(String(rawSigilId));
 
@@ -1107,7 +1120,6 @@ export const mintPositionSigil = async (pos: PositionRecord, vault: VaultRecord)
   }
 };
 
-/** Optional UI component wrapper (drop-in) */
 export type PositionSigilMintProps = Readonly<{
   position: PositionRecord;
   vault: VaultRecord;
