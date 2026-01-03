@@ -1,11 +1,12 @@
 // SigilMarkets/views/Vault/VaultPanel.tsx
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import type { KaiMoment, VaultId } from "../../types/marketTypes";
 import { useSigilMarketsUi } from "../../state/uiStore";
 import { useScrollRestoration } from "../../hooks/useScrollRestoration";
 import { useVault, useVaultActions } from "../../hooks/useVault";
+import { formatPhiMicro } from "../../utils/format";
 
 import { TopBar } from "../../ui/chrome/TopBar";
 import { Card, CardContent } from "../../ui/atoms/Card";
@@ -42,6 +43,7 @@ export const VaultPanel = (props: VaultPanelProps) => {
 
   const [dwOpen, setDwOpen] = useState<boolean>(false);
   const [dwMode, setDwMode] = useState<"deposit" | "withdraw">("deposit");
+  const [isCompactAmount, setIsCompactAmount] = useState(false);
 
   const title = "Vault";
 
@@ -58,12 +60,26 @@ export const VaultPanel = (props: VaultPanelProps) => {
       return status === "ready" ? "Inhale a glyph to activate" : "Loading vault…";
     }
 
-    const spend = (spendableMicro as unknown as bigint).toString(10);
-    const locked = (lockedMicro as unknown as bigint).toString(10);
+    const maxDecimals = isCompactAmount ? 2 : 4;
+    const spend = formatPhiMicro(spendableMicro, { withUnit: true, maxDecimals, trimZeros: true });
+    const locked = formatPhiMicro(lockedMicro, { withUnit: true, maxDecimals, trimZeros: true });
     const tail = lastLockPulse > 0 ? ` • last lock p${lastLockPulse}` : "";
 
-    return `spendable ${spend}μ • locked ${locked}μ • locks ${lockedCount}${tail}`;
-  }, [vault, status, spendableMicro, lockedMicro, lockedCount, lastLockPulse]);
+    return `spendable ${spend} • locked ${locked} • locks ${lockedCount}${tail}`;
+  }, [vault, status, spendableMicro, lockedMicro, lockedCount, lastLockPulse, isCompactAmount]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const media = window.matchMedia("(max-width: 520px)");
+    const handleChange = () => setIsCompactAmount(media.matches);
+    handleChange();
+    if (typeof media.addEventListener === "function") {
+      media.addEventListener("change", handleChange);
+      return () => media.removeEventListener("change", handleChange);
+    }
+    media.addListener(handleChange);
+    return () => media.removeListener(handleChange);
+  }, []);
 
   const isActiveVault = useMemo(() => {
     if (!vault) return false;
