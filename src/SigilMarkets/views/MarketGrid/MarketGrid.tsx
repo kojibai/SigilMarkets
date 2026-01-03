@@ -22,8 +22,11 @@ export type MarketGridProps = Readonly<{
 
 export const MarketGrid = (props: MarketGridProps) => {
   const { state: ui } = useSigilMarketsUi();
-
   const grid = useMarketGrid(props.now.pulse);
+
+  // Destructure to keep hooks deps clean and avoid exhaustive-deps warnings.
+  const { items, filteredCount, totalCount, filters, prefs } = grid;
+  type GridItem = (typeof items)[number];
 
   useScrollRestoration(ui.route, {
     mode: props.scrollMode,
@@ -32,24 +35,29 @@ export const MarketGrid = (props: MarketGridProps) => {
   });
 
   const subtitle = useMemo(() => {
-    const f = grid.filteredCount;
-    const t = grid.totalCount;
-    if (t === 0) return "Loading markets…";
-    if (f === t) return `${t} markets`;
-    return `${f} of ${t}`;
-  }, [grid.filteredCount, grid.totalCount]);
+    if (totalCount === 0) return "Loading markets…";
+    if (filteredCount === totalCount) return `${totalCount} markets`;
+    return `${filteredCount} of ${totalCount}`;
+  }, [filteredCount, totalCount]);
 
-  const showEmpty = grid.totalCount > 0 && grid.filteredCount === 0;
+  const showEmpty = totalCount > 0 && filteredCount === 0;
 
-  const grouped = useMemo(() => {
-    const map = new Map<MarketCategory, typeof grid.items>();
+  const grouped = useMemo((): ReadonlyMap<MarketCategory, readonly GridItem[]> => {
+    // Use mutable arrays internally, then expose readonly arrays.
+    const map = new Map<MarketCategory, GridItem[]>();
     for (const cat of MARKET_CATEGORIES) map.set(cat, []);
-    for (const item of grid.items) {
-      const list = map.get(item.market.def.category as MarketCategory);
-      if (list) list.push(item);
+
+    for (const it of items) {
+      const cat = it.market.def.category as MarketCategory;
+      const list = map.get(cat);
+      if (list) list.push(it);
     }
-    return map;
-  }, [grid.items]);
+
+    // Freeze outward type (readonly) so callers can't mutate.
+    const out = new Map<MarketCategory, readonly GridItem[]>();
+    for (const [cat, list] of map.entries()) out.set(cat, list);
+    return out;
+  }, [items]);
 
   const availableCategories = useMemo(
     () => MARKET_CATEGORIES.filter((cat) => (grouped.get(cat)?.length ?? 0) > 0),
@@ -59,29 +67,26 @@ export const MarketGrid = (props: MarketGridProps) => {
   const [openCategories, setOpenCategories] = useState<Set<MarketCategory>>(new Set());
 
   const openKey = useMemo(() => {
-    const activeKey = grid.filters.categories.join("|");
+    const activeKey = filters.categories.join("|");
     const availableKey = availableCategories.join("|");
     return `${activeKey}::${availableKey}`;
-  }, [availableCategories, grid.filters.categories]);
+  }, [availableCategories, filters.categories]);
 
   useEffect(() => {
     const next = new Set<MarketCategory>();
-    if (grid.filters.categories.length > 0) {
-      grid.filters.categories.forEach((cat) => next.add(cat));
+    if (filters.categories.length > 0) {
+      filters.categories.forEach((cat) => next.add(cat));
     } else {
       availableCategories.forEach((cat) => next.add(cat));
     }
     setOpenCategories(next);
-  }, [openKey, availableCategories, grid.filters.categories]);
+  }, [openKey, availableCategories, filters.categories]);
 
   const toggleCategory = (cat: MarketCategory): void => {
     setOpenCategories((prev) => {
       const next = new Set(prev);
-      if (next.has(cat)) {
-        next.delete(cat);
-      } else {
-        next.add(cat);
-      }
+      if (next.has(cat)) next.delete(cat);
+      else next.add(cat);
       return next;
     });
   };
@@ -100,15 +105,16 @@ export const MarketGrid = (props: MarketGridProps) => {
         <MarketFilters now={props.now} />
       </div>
 
-      {grid.totalCount === 0 ? (
+      {totalCount === 0 ? (
         <MarketGridSkeleton />
       ) : showEmpty ? (
         <MarketGridEmpty />
       ) : (
         <div className="sm-market-sections">
           {availableCategories.map((cat) => {
-            const items = grouped.get(cat) ?? [];
-            if (items.length === 0) return null;
+            const catItems = grouped.get(cat) ?? [];
+            if (catItems.length === 0) return null;
+
             const isOpen = openCategories.has(cat);
 
             return (
@@ -120,14 +126,15 @@ export const MarketGrid = (props: MarketGridProps) => {
                   onClick={() => toggleCategory(cat)}
                 >
                   <span className="sm-market-section-title">{labelForCategory(cat)}</span>
-                  <span className="sm-market-section-count">{items.length}</span>
+                  <span className="sm-market-section-count">{catItems.length}</span>
                   <span className="sm-market-section-icon" aria-hidden="true">
                     {isOpen ? "–" : "+"}
                   </span>
                 </button>
+
                 <div className="sm-market-section-body" hidden={!isOpen}>
-                  <div className={`sm-grid ${grid.prefs.layout === "list" ? "is-list" : "is-honeycomb"}`}>
-                    {items.map((it) => (
+                  <div className={`sm-grid ${prefs.layout === "list" ? "is-list" : "is-honeycomb"}`}>
+                    {catItems.map((it) => (
                       <MarketCell key={it.marketId as unknown as string} {...it} />
                     ))}
                   </div>
