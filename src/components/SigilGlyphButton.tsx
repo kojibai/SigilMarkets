@@ -124,7 +124,7 @@ const SigilGlyphButton: React.FC<Props> = () => {
         <span
           className="sigil-thumb"
           aria-hidden="true"
-          inert
+          inert="true"
         >
           <KaiSigil
             key={instanceKey}
