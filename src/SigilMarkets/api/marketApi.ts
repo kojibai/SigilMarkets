@@ -650,18 +650,516 @@ const withQuery = (url: string, query?: Readonly<Record<string, string>>): strin
 
 /**
  * Local seeded markets for standalone app / offline mode.
- * Deterministic enough for UI; real deployments will use remote list.
+ * IMPORTANT:
+ * - Categories are set explicitly so the UI can filter (Sports tab shows sports, etc.).
+ * - We keep each market ID unique (no duplicates like “btc-green” + “btc-red”).
  */
 export const seedDemoMarkets = (nowPulse: KaiPulse): readonly Market[] => {
-  const mk = (id: string, slug: string, q: string): Market =>
-    makeEmptyBinaryMarket({ id, slug, question: q, nowPulse });
+  // Keep category strings stable — your UI filter can key off these exactly.
+  const CAT = {
+    PULSE: "pulse",
+    KAI: "kai",
+    CULTURE: "culture",
+    MARKETS: "markets",
+    SPORTS: "sports",
+    WEATHER: "weather",
+    CALENDAR: "calendar",
+  } as const;
+
+  type SeedCategory = typeof CAT[keyof typeof CAT];
+
+  const mk = (
+    id: string,
+    slug: string,
+    question: string,
+    opts: Readonly<{
+      category: SeedCategory;
+      tags?: readonly string[];
+      description?: string;
+      iconEmoji?: string;
+      closeInPulses?: number;
+    }>,
+  ): Market => {
+    const base = makeEmptyBinaryMarket({ id, slug, question, nowPulse });
+
+    // Optional: tighten demo market timing a bit so seeded “next/today/week” feel real.
+    const closeIn = typeof opts.closeInPulses === "number" && Number.isFinite(opts.closeInPulses) ? opts.closeInPulses : undefined;
+    const timing = closeIn
+      ? ({
+          ...base.def.timing,
+          createdPulse: nowPulse,
+          openPulse: nowPulse,
+          closePulse: (nowPulse + Math.max(1, Math.floor(closeIn))) as KaiPulse,
+        } as MarketTiming)
+      : base.def.timing;
+
+    return {
+      ...base,
+      def: {
+        ...base.def,
+        category: opts.category as unknown as MarketCategory,
+        tags: (opts.tags ?? []) as readonly string[],
+        description: opts.description ?? base.def.description,
+        iconEmoji: opts.iconEmoji ?? base.def.iconEmoji,
+        timing,
+      },
+    };
+  };
 
   return [
-    mk("m_weather_rain_tomorrow", "rain-tomorrow", "Will it rain tomorrow in NYC?"),
-    mk("m_weather_snow_week", "snow-this-week", "Will NYC get measurable snow this week?"),
-    mk("m_crypto_btc_100k", "btc-100k", "Will BTC touch 100k before the close?"),
-    mk("m_sports_knicks_win", "knicks-win", "Will the Knicks win their next game?"),
-    mk("m_world_launch", "rocket-launch", "Will the next launch succeed on the first attempt?"),
+    /* ─────────────────────────────────────────────────────────────
+       🔮 PULSE (Zero-API games — fully deterministic in-app)
+       - These are “pure Kai + seed rules” games.
+       - Category: pulse
+       - Tags: pulse, game
+    ───────────────────────────────────────────────────────────── */
+
+    /* Coin / Dice / Cards / Roulette */
+    mk("m_pulse_coinflip_next", "coinflip-next", "Will the next Kai coinflip land HEADS?", {
+      category: CAT.PULSE,
+      tags: ["pulse", "game", "coinflip"],
+      iconEmoji: "🪙",
+      closeInPulses: 44,
+    }),
+    mk("m_pulse_coinflip_bestof3_heads", "coinflip-bestof3", "Will HEADS win best-of-3 (next 3 flips)?", {
+      category: CAT.PULSE,
+      tags: ["pulse", "game", "coinflip"],
+      iconEmoji: "🪙",
+      closeInPulses: 44 * 3,
+    }),
+    mk("m_pulse_coinflip_streak3_today", "coinflip-streak3", "Will there be a 3-in-a-row HEADS streak today?", {
+      category: CAT.PULSE,
+      tags: ["pulse", "game", "coinflip", "today"],
+      iconEmoji: "🧬",
+      closeInPulses: 17_491,
+    }),
+
+    mk("m_pulse_dice_six_next", "dice-six-next", "Will the next Kai dice roll be a 6?", {
+      category: CAT.PULSE,
+      tags: ["pulse", "game", "dice"],
+      iconEmoji: "🎲",
+      closeInPulses: 44,
+    }),
+    mk("m_pulse_dice_even_next", "dice-even-next", "Will the next Kai dice roll be EVEN?", {
+      category: CAT.PULSE,
+      tags: ["pulse", "game", "dice"],
+      iconEmoji: "🎲",
+      closeInPulses: 44,
+    }),
+    mk("m_pulse_dice_sum_7_next2", "dice-sum7-next2", "Will the next TWO Kai dice rolls sum to 7?", {
+      category: CAT.PULSE,
+      tags: ["pulse", "game", "dice"],
+      iconEmoji: "🎲",
+      closeInPulses: 44 * 2,
+    }),
+
+    mk("m_pulse_roulette_red_next", "roulette-red-next", "Will the next Kai roulette spin land RED?", {
+      category: CAT.PULSE,
+      tags: ["pulse", "game", "roulette"],
+      iconEmoji: "🎰",
+      closeInPulses: 44,
+    }),
+    mk("m_pulse_roulette_zero_next", "roulette-zero-next", "Will the next Kai roulette spin land on 0?", {
+      category: CAT.PULSE,
+      tags: ["pulse", "game", "roulette"],
+      iconEmoji: "🎯",
+      closeInPulses: 44,
+    }),
+
+    mk("m_pulse_card_ace_next", "card-ace-next", "Will the next Kai card draw be an ACE?", {
+      category: CAT.PULSE,
+      tags: ["pulse", "game", "cards"],
+      iconEmoji: "🃏",
+      closeInPulses: 44,
+    }),
+    mk("m_pulse_card_face_next", "card-face-next", "Will the next Kai card draw be a FACE card (J/Q/K)?", {
+      category: CAT.PULSE,
+      tags: ["pulse", "game", "cards"],
+      iconEmoji: "🃏",
+      closeInPulses: 44,
+    }),
+    mk("m_pulse_card_heart_next", "card-heart-next", "Will the next Kai card draw be a HEART?", {
+      category: CAT.PULSE,
+      tags: ["pulse", "game", "cards"],
+      iconEmoji: "♥️",
+      closeInPulses: 44,
+    }),
+
+    /* Hash / seed micro-proofs */
+    mk("m_pulse_hash_even_next", "hash-even-next", "Will the next pulse-hash end in an even hex digit?", {
+      category: CAT.PULSE,
+      tags: ["pulse", "hash"],
+      iconEmoji: "🔐",
+      closeInPulses: 11,
+    }),
+    mk("m_pulse_hash_00_next", "hash-00-next", "Will the next pulse-hash start with '00'?", {
+      category: CAT.PULSE,
+      tags: ["pulse", "hash"],
+      iconEmoji: "🔐",
+      closeInPulses: 11,
+    }),
+    mk("m_pulse_hash_contains_dead_today", "hash-dead-today", "Will any pulse-hash contain 'dead' today?", {
+      category: CAT.PULSE,
+      tags: ["pulse", "hash", "today"],
+      iconEmoji: "🧾",
+      closeInPulses: 17_491,
+    }),
+
+    /* Lattice mini-games (KKS indexing) */
+    mk("m_pulse_next_beat_boundary_even", "next-beat-even", "Will the next BEAT boundary pulse be EVEN?", {
+      category: CAT.PULSE,
+      tags: ["pulse", "kai", "lattice"],
+      iconEmoji: "🧿",
+      closeInPulses: 44,
+    }),
+    mk("m_pulse_next_step_boundary_even", "next-step-even", "Will the next STEP boundary pulse be EVEN?", {
+      category: CAT.PULSE,
+      tags: ["pulse", "kai", "lattice"],
+      iconEmoji: "🧿",
+      closeInPulses: 11,
+    }),
+    mk("m_pulse_next_beat_prime", "next-beat-prime", "Will the next moment's beat be PRIME?", {
+      category: CAT.PULSE,
+      tags: ["pulse", "kai", "lattice"],
+      iconEmoji: "🔢",
+      closeInPulses: 44,
+    }),
+
+    /* ─────────────────────────────────────────────────────────────
+       🌈 KAI (Daily Oracles — real Kai math, no vibes)
+       - These are computed from your KKS engine (weekday/arc/seed residues).
+       - Category: kai
+    ───────────────────────────────────────────────────────────── */
+
+    /* Kai weekday (6) */
+    mk("m_kai_weekday_solhara_today", "weekday-solhara", "Will today's Kai weekday be Solhara?", {
+      category: CAT.KAI,
+      tags: ["kai", "weekday"],
+      iconEmoji: "☀️",
+      closeInPulses: 17_491,
+    }),
+    mk("m_kai_weekday_aquaris_today", "weekday-aquaris", "Will today's Kai weekday be Aquaris?", {
+      category: CAT.KAI,
+      tags: ["kai", "weekday"],
+      iconEmoji: "💧",
+      closeInPulses: 17_491,
+    }),
+    mk("m_kai_weekday_flamora_today", "weekday-flamora", "Will today's Kai weekday be Flamora?", {
+      category: CAT.KAI,
+      tags: ["kai", "weekday"],
+      iconEmoji: "🔥",
+      closeInPulses: 17_491,
+    }),
+    mk("m_kai_weekday_verdari_today", "weekday-verdari", "Will today's Kai weekday be Verdari?", {
+      category: CAT.KAI,
+      tags: ["kai", "weekday"],
+      iconEmoji: "🌿",
+      closeInPulses: 17_491,
+    }),
+    mk("m_kai_weekday_sonari_today", "weekday-sonari", "Will today's Kai weekday be Sonari?", {
+      category: CAT.KAI,
+      tags: ["kai", "weekday"],
+      iconEmoji: "🎶",
+      closeInPulses: 17_491,
+    }),
+    mk("m_kai_weekday_kaelith_today", "weekday-kaelith", "Will today's Kai weekday be Kaelith?", {
+      category: CAT.KAI,
+      tags: ["kai", "weekday"],
+      iconEmoji: "🪞",
+      closeInPulses: 17_491,
+    }),
+
+    /* Kai arc (6) */
+    mk("m_kai_arc_ignition_today", "arc-ignition", "Will today's Kai arc be Ignition?", {
+      category: CAT.KAI,
+      tags: ["kai", "arc"],
+      iconEmoji: "⚡",
+      closeInPulses: 17_491,
+    }),
+    mk("m_kai_arc_integration_today", "arc-integration", "Will today's Kai arc be Integration?", {
+      category: CAT.KAI,
+      tags: ["kai", "arc"],
+      iconEmoji: "🧩",
+      closeInPulses: 17_491,
+    }),
+    mk("m_kai_arc_harmonization_today", "arc-harmonization", "Will today's Kai arc be Harmonization?", {
+      category: CAT.KAI,
+      tags: ["kai", "arc"],
+      iconEmoji: "🌀",
+      closeInPulses: 17_491,
+    }),
+    mk("m_kai_arc_reflection_today", "arc-reflection", "Will today's Kai arc be Reflection?", {
+      category: CAT.KAI,
+      tags: ["kai", "arc"],
+      iconEmoji: "🪞",
+      closeInPulses: 17_491,
+    }),
+    mk("m_kai_arc_purification_today", "arc-purification", "Will today's Kai arc be Purification?", {
+      category: CAT.KAI,
+      tags: ["kai", "arc"],
+      iconEmoji: "💠",
+      closeInPulses: 17_491,
+    }),
+    mk("m_kai_arc_dream_today", "arc-dream", "Will today's Kai arc be Dream?", {
+      category: CAT.KAI,
+      tags: ["kai", "arc"],
+      iconEmoji: "🌙",
+      closeInPulses: 17_491,
+    }),
+
+    /* Day-seed residues (derived from dayStartPulse % 36/%44/%11) */
+    mk("m_kai_seedbeat_prime_today", "seedbeat-prime", "Is today's Day-Seed Beat PRIME?", {
+      category: CAT.KAI,
+      tags: ["kai", "seed", "beat"],
+      iconEmoji: "🔢",
+      closeInPulses: 17_491,
+    }),
+    mk("m_kai_seedstep_div11_today", "seedstep-div11", "Is today's Day-Seed Step divisible by 11?", {
+      category: CAT.KAI,
+      tags: ["kai", "seed", "step"],
+      iconEmoji: "🧿",
+      closeInPulses: 17_491,
+    }),
+    mk("m_kai_seedpulse_is_0_today", "seedpulse-0", "Is today's Day-Seed Pulse = 0?", {
+      category: CAT.KAI,
+      tags: ["kai", "seed", "pulse"],
+      iconEmoji: "0️⃣",
+      closeInPulses: 17_491,
+    }),
+
+    /* ─────────────────────────────────────────────────────────────
+       💬 CULTURE (no API required — resolved by public artifact proof)
+       - Category: culture
+    ───────────────────────────────────────────────────────────── */
+
+    mk("m_culture_song_hits_spotify_global1_week", "song-global1-week", "Will ANY new song hit #1 on Spotify Global this week?", {
+      category: CAT.CULTURE,
+      tags: ["culture", "music", "chart", "week"],
+      iconEmoji: "🎧",
+      closeInPulses: 17_491 * 7,
+    }),
+    mk("m_culture_album_hits_apple1_week", "album-apple1-week", "Will ANY new album hit #1 on Apple Music (Top Albums) this week?", {
+      category: CAT.CULTURE,
+      tags: ["culture", "music", "chart", "week"],
+      iconEmoji: "💿",
+      closeInPulses: 17_491 * 7,
+    }),
+    mk("m_culture_trailer_hits_yt_trending_week", "trailer-trending-week", "Will a movie/series trailer hit YouTube Trending this week?", {
+      category: CAT.CULTURE,
+      tags: ["culture", "tv", "film", "week"],
+      iconEmoji: "🎬",
+      closeInPulses: 17_491 * 7,
+    }),
+    mk("m_culture_platform_outage_x_week", "x-outage-week", "Will X (Twitter) have a widespread outage this week?", {
+      category: CAT.CULTURE,
+      tags: ["culture", "platform", "week"],
+      iconEmoji: "📵",
+      closeInPulses: 17_491 * 7,
+    }),
+    mk("m_culture_new_meme_template_week", "new-meme-template", "Will a new meme template be born this week?", {
+      category: CAT.CULTURE,
+      tags: ["culture", "meme", "week"],
+      iconEmoji: "😂",
+      closeInPulses: 17_491 * 7,
+    }),
+
+    /* ─────────────────────────────────────────────────────────────
+       🪙 MARKETS (screenshot-proof)
+       - Category: markets
+    ───────────────────────────────────────────────────────────── */
+
+    mk("m_crypto_btc_100k", "btc-100k", "Will BTC touch 100k before the day closes?", {
+      category: CAT.MARKETS,
+      tags: ["markets", "crypto", "btc", "today"],
+      iconEmoji: "₿",
+      closeInPulses: 17_491,
+    }),
+    mk("m_crypto_btc_green_today", "btc-green-today", "Will BTC close UP today?", {
+      category: CAT.MARKETS,
+      tags: ["markets", "crypto", "btc", "today"],
+      iconEmoji: "📈",
+      closeInPulses: 17_491,
+    }),
+    mk("m_crypto_eth_5k", "eth-5k", "Will ETH touch 5k before the day closes?", {
+      category: CAT.MARKETS,
+      tags: ["markets", "crypto", "eth", "today"],
+      iconEmoji: "Ξ",
+      closeInPulses: 17_491,
+    }),
+    mk("m_markets_spy_green_today", "spy-green-today", "Will SPY close green today?", {
+      category: CAT.MARKETS,
+      tags: ["markets", "stocks", "index", "today"],
+      iconEmoji: "🏛️",
+      closeInPulses: 17_491,
+    }),
+    mk("m_markets_vix_over_20_today", "vix-20-today", "Will VIX touch 20+ today?", {
+      category: CAT.MARKETS,
+      tags: ["markets", "volatility", "today"],
+      iconEmoji: "🌪️",
+      closeInPulses: 17_491,
+    }),
+
+    /* ─────────────────────────────────────────────────────────────
+       🏈🏀⚾🏒⚽ SPORTS (final-score proof)
+       - Category: sports
+       - Tags include league so you can sub-filter in UI later.
+    ───────────────────────────────────────────────────────────── */
+
+    /* NFL */
+    mk("m_nfl_cowboys_win", "cowboys-win", "Will the Dallas Cowboys win their next game?", {
+      category: CAT.SPORTS,
+      tags: ["sports", "nfl"],
+      iconEmoji: "🏈",
+      closeInPulses: 17_491 * 3,
+    }),
+    mk("m_nfl_chiefs_win", "chiefs-win", "Will the Kansas City Chiefs win their next game?", {
+      category: CAT.SPORTS,
+      tags: ["sports", "nfl"],
+      iconEmoji: "🏈",
+      closeInPulses: 17_491 * 3,
+    }),
+    mk("m_nfl_eagles_win", "eagles-win", "Will the Philadelphia Eagles win their next game?", {
+      category: CAT.SPORTS,
+      tags: ["sports", "nfl"],
+      iconEmoji: "🏈",
+      closeInPulses: 17_491 * 3,
+    }),
+    mk("m_nfl_49ers_win", "49ers-win", "Will the San Francisco 49ers win their next game?", {
+      category: CAT.SPORTS,
+      tags: ["sports", "nfl"],
+      iconEmoji: "🏈",
+      closeInPulses: 17_491 * 3,
+    }),
+    mk("m_nfl_giants_win", "giants-win", "Will the New York Giants win their next game?", {
+      category: CAT.SPORTS,
+      tags: ["sports", "nfl"],
+      iconEmoji: "🏈",
+      closeInPulses: 17_491 * 3,
+    }),
+
+    /* NBA */
+    mk("m_nba_knicks_win", "knicks-win", "Will the New York Knicks win their next game?", {
+      category: CAT.SPORTS,
+      tags: ["sports", "nba"],
+      iconEmoji: "🏀",
+      closeInPulses: 17_491 * 2,
+    }),
+    mk("m_nba_lakers_win", "lakers-win", "Will the Los Angeles Lakers win their next game?", {
+      category: CAT.SPORTS,
+      tags: ["sports", "nba"],
+      iconEmoji: "🏀",
+      closeInPulses: 17_491 * 2,
+    }),
+    mk("m_nba_celtics_win", "celtics-win", "Will the Boston Celtics win their next game?", {
+      category: CAT.SPORTS,
+      tags: ["sports", "nba"],
+      iconEmoji: "🏀",
+      closeInPulses: 17_491 * 2,
+    }),
+    mk("m_nba_warriors_win", "warriors-win", "Will the Golden State Warriors win their next game?", {
+      category: CAT.SPORTS,
+      tags: ["sports", "nba"],
+      iconEmoji: "🏀",
+      closeInPulses: 17_491 * 2,
+    }),
+
+    /* MLB */
+    mk("m_mlb_yankees_win", "yankees-win", "Will the New York Yankees win their next game?", {
+      category: CAT.SPORTS,
+      tags: ["sports", "mlb"],
+      iconEmoji: "⚾",
+      closeInPulses: 17_491 * 4,
+    }),
+    mk("m_mlb_dodgers_win", "dodgers-win", "Will the Los Angeles Dodgers win their next game?", {
+      category: CAT.SPORTS,
+      tags: ["sports", "mlb"],
+      iconEmoji: "⚾",
+      closeInPulses: 17_491 * 4,
+    }),
+
+    /* NHL */
+    mk("m_nhl_rangers_win", "rangers-win", "Will the New York Rangers win their next game?", {
+      category: CAT.SPORTS,
+      tags: ["sports", "nhl"],
+      iconEmoji: "🏒",
+      closeInPulses: 17_491 * 3,
+    }),
+    mk("m_nhl_mapleleafs_win", "leafs-win", "Will the Toronto Maple Leafs win their next game?", {
+      category: CAT.SPORTS,
+      tags: ["sports", "nhl"],
+      iconEmoji: "🏒",
+      closeInPulses: 17_491 * 3,
+    }),
+
+    /* Soccer (clubs) */
+    mk("m_soccer_manutd_win", "manutd-win", "Will Manchester United win their next match?", {
+      category: CAT.SPORTS,
+      tags: ["sports", "soccer"],
+      iconEmoji: "⚽",
+      closeInPulses: 17_491 * 4,
+    }),
+    mk("m_soccer_realmadrid_win", "realmadrid-win", "Will Real Madrid win their next match?", {
+      category: CAT.SPORTS,
+      tags: ["sports", "soccer"],
+      iconEmoji: "⚽",
+      closeInPulses: 17_491 * 4,
+    }),
+
+    /* ─────────────────────────────────────────────────────────────
+       🌦️ WEATHER (local observation — no API)
+       - Category: weather
+       - Note: location specificity is in the question; demo uses NYC.
+    ───────────────────────────────────────────────────────────── */
+
+    mk("m_weather_rain_tomorrow", "rain-tomorrow", "Will it rain tomorrow in NYC?", {
+      category: CAT.WEATHER,
+      tags: ["weather", "nyc", "tomorrow"],
+      iconEmoji: "🌧️",
+      closeInPulses: 17_491,
+    }),
+    mk("m_weather_rain_before_noon_tomorrow", "rain-before-noon", "Will it rain before noon tomorrow in NYC?", {
+      category: CAT.WEATHER,
+      tags: ["weather", "nyc", "tomorrow"],
+      iconEmoji: "⛅",
+      closeInPulses: 17_491,
+    }),
+    mk("m_weather_snow_sticks_week", "snow-sticks-week", "Will NYC see snow that sticks this week?", {
+      category: CAT.WEATHER,
+      tags: ["weather", "nyc", "week"],
+      iconEmoji: "❄️",
+      closeInPulses: 17_491 * 7,
+    }),
+    mk("m_weather_thunder_week", "thunder-week", "Will NYC get thunder at least once this week?", {
+      category: CAT.WEATHER,
+      tags: ["weather", "nyc", "week"],
+      iconEmoji: "⚡",
+      closeInPulses: 17_491 * 7,
+    }),
+
+    /* ─────────────────────────────────────────────────────────────
+       🗓️ CALENDAR / REALITY (deterministic, always resolvable)
+       - Category: calendar
+       - These are “pure math” checks (Kai boundary / residue / date patterns).
+    ───────────────────────────────────────────────────────────── */
+
+    mk("m_calendar_kai_daystart_even_tomorrow", "kai-daystart-even", "Will tomorrow's Kai day-start pulse be EVEN?", {
+      category: CAT.CALENDAR,
+      tags: ["calendar", "kai", "tomorrow"],
+      iconEmoji: "🗓️",
+      closeInPulses: 17_491,
+    }),
+    mk("m_calendar_kai_daystart_ends00_tomorrow", "kai-daystart-ends00", "Will tomorrow's Kai day-start pulse end with '00'?", {
+      category: CAT.CALENDAR,
+      tags: ["calendar", "kai", "tomorrow"],
+      iconEmoji: "🧮",
+      closeInPulses: 17_491,
+    }),
+    mk("m_calendar_next_month_starts_weekend", "next-month-weekend", "Will next month start on a weekend?", {
+      category: CAT.CALENDAR,
+      tags: ["calendar", "chronos"],
+      iconEmoji: "📅",
+      closeInPulses: 17_491 * 14,
+    }),
   ];
 };
 
