@@ -225,7 +225,7 @@ function LiveKaiButton({
             </span>
           </div>
 
-          <div className="live-meta">
+          <div className="live-meta live-meta--pulse">
             <span className="mono" style={neonTextStyle}>
               {snap.pulseStr}
             </span>
@@ -238,7 +238,9 @@ function LiveKaiButton({
                 •
               </span>{" "}
               <span className="kai-tag">D</span>
-              <span className="kai-num kai-num--chakra">{snap.beatStepDMY.day}</span>
+              <span className="kai-num kai-num--chakra" style={{ color: "var(--kai-chakra)" }}>
+                {snap.beatStepDMY.day}
+              </span>
               <span className="kai-sep">/</span>
               <span className="kai-tag">M</span>
               <span className="kai-num kai-num--month">{snap.beatStepDMY.month}</span>
@@ -272,7 +274,7 @@ export const TopBar = (props: TopBarProps) => {
   const canSeal = true;
 
   const handleOpenKlock = useCallback(() => {
-    navigate("/klock", { state: { openDetails: true } });
+    navigate("/klock", { state: { openDetails: false } });
   }, [navigate]);
 
   const handleSeal = useCallback(() => {
@@ -313,13 +315,13 @@ export const TopBar = (props: TopBarProps) => {
               selected={false}
               disabled={!canSeal}
               onClick={handleSeal}
-              title={canSeal ? "Seal a prophecy" : "Open a market to seal a prophecy"}
+              title={canSeal ? "Seal" : "Open a market to seal"}
               tone="gold"
               variant="solid"
               className="sm-topbar-seal"
               left={<Icon name="spark" size={14} tone="gold" />}
             >
-              Seal Prophecy
+              Seal
             </Chip>
 
             <LiveKaiButton

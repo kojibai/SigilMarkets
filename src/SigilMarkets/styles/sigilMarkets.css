@@ -1160,6 +1160,12 @@ body{
   text-overflow: ellipsis;
 }
 
+.live-meta--pulse{
+  overflow: visible;
+  text-overflow: clip;
+  min-width: max-content;
+}
+
 @media (max-width: 420px){
   .topbar-live{ max-width: 70vw; }
   .topbar-live{ gap: 8px; }

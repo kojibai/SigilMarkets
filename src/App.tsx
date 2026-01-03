@@ -809,7 +809,7 @@ export function KlockRoute(): React.JSX.Element {
   }, [navigate]);
 
   const navState = (location.state as KlockNavState | null) ?? null;
-  const initialDetailsOpen = navState?.openDetails ?? true;
+  const initialDetailsOpen = navState?.openDetails ?? false;
 
   return (
     <>
@@ -985,7 +985,7 @@ function LiveKaiButton({
             </span>
           </div>
 
-          <div className="live-meta">
+          <div className="live-meta live-meta--pulse">
             <span className="mono" style={neonTextStyle}>
               {snap.pulseStr}
             </span>
@@ -998,7 +998,9 @@ function LiveKaiButton({
                 •
               </span>{" "}
               <span className="kai-tag">D</span>
-              <span className="kai-num kai-num--chakra">{snap.beatStepDMY.day}</span>
+              <span className="kai-num kai-num--chakra" style={{ color: "var(--kai-chakra)" }}>
+                {snap.beatStepDMY.day}
+              </span>
               <span className="kai-sep">/</span>
               <span className="kai-tag">M</span>
               <span className="kai-num kai-num--month">{snap.beatStepDMY.month}</span>
@@ -1374,7 +1376,7 @@ export function AppChrome(): React.JSX.Element {
   }, [location.pathname]);
 
   const openKlock = useCallback((): void => {
-    const st: KlockNavState = { openDetails: true };
+    const st: KlockNavState = { openDetails: false };
     navigate("/klock", { state: st });
   }, [navigate]);
 

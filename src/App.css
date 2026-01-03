@@ -3985,6 +3985,12 @@ html[data-perf="low"] .kk-pop__panel {
   text-overflow: ellipsis;
 }
 
+.live-meta--pulse{
+  overflow: visible;
+  text-overflow: clip;
+  min-width: max-content;
+}
+
 /* Ultra-tight phones: tighten spacing more */
 @media (max-width: 420px){
   .topbar-live{ max-width: 70vw; }

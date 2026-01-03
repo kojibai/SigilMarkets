@@ -735,11 +735,15 @@ const INSTANT_OPEN_STYLE: React.CSSProperties = {
 /* ────────────────────────────────────────────────
    Main Component
    ──────────────────────────────────────────────── */
-export const EternalKlock: React.FC = () => {
+type EternalKlockProps = {
+  initialDetailsOpen?: boolean;
+};
+
+export const EternalKlock: React.FC<EternalKlockProps> = ({ initialDetailsOpen = false }) => {
   // ✅ No loading flash: start with a baseline offline payload immediately.
   const [klock, setKlock] = useState<KlockData>(() => buildOfflinePayload(new Date()));
 
-  const [showDetails, setShowDetails] = useState<boolean>(false);
+  const [showDetails, setShowDetails] = useState<boolean>(initialDetailsOpen);
   const [glowPulse, setGlowPulse] = useState<boolean>(false);
   const [showWeekModal, setShowWeekModal] = useState<boolean>(false);
 
