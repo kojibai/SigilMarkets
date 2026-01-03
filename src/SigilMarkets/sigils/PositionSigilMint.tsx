@@ -103,6 +103,29 @@ const lissajousPath = (seedHex: string): string => {
   return d;
 };
 
+const PHI = (1 + Math.sqrt(5)) / 2;
+
+const goldenSpiralPath = (): string => {
+  const cx = 500;
+  const cy = 500;
+
+  // Logarithmic spiral that scales by Φ every quarter turn.
+  const b = Math.log(PHI) / (Math.PI / 2);
+  const thetaMax = Math.PI * 4.5;
+  const a = 360 / Math.exp(b * thetaMax);
+
+  const steps = 260;
+  let d = "";
+  for (let i = 0; i <= steps; i += 1) {
+    const t = (i / steps) * thetaMax;
+    const r = a * Math.exp(b * t);
+    const x = cx + r * Math.cos(t);
+    const y = cy + r * Math.sin(t);
+    d += i === 0 ? `M ${x.toFixed(2)} ${y.toFixed(2)} ` : `L ${x.toFixed(2)} ${y.toFixed(2)} `;
+  }
+  return d;
+};
+
 const hexRingPath = (): string => {
   // A simple hex ring for “artifact” feel
   const pts: Array<[number, number]> = [];
@@ -166,6 +189,7 @@ const makePayload = (pos: PositionRecord, vault: VaultRecord): PositionSigilPayl
 const buildSvg = (payload: PositionSigilPayloadV1, svgHashSeed: string): string => {
   const ring = hexRingPath();
   const wave = lissajousPath(svgHashSeed);
+  const spiral = goldenSpiralPath();
 
   const yesTone = "rgba(191,252,255,0.92)";
   const noTone = "rgba(183,163,255,0.92)";
@@ -181,6 +205,8 @@ const buildSvg = (payload: PositionSigilPayloadV1, svgHashSeed: string): string 
   const waveGlowOpacity = clamp01(0.10 + styleRnd() * 0.20);
   const waveCoreOpacity = clamp01(0.62 + styleRnd() * 0.30);
   const labelOpacity = clamp01(0.62 + styleRnd() * 0.20);
+  const spiralOpacity = clamp01(0.22 + styleRnd() * 0.24);
+  const ringPhiOpacity = clamp01(0.24 + styleRnd() * 0.2);
 
   const metaJson = JSON.stringify(payload);
 
@@ -236,6 +262,9 @@ const buildSvg = (payload: PositionSigilPayloadV1, svgHashSeed: string): string 
   <path d="${ring}" fill="none" stroke="rgba(255,255,255,${ringOuterOpacity.toFixed(3)})" stroke-width="10"/>
   <path d="${ring}" fill="none" stroke="${tone}" stroke-width="3" opacity="${ringToneOpacity.toFixed(3)}"/>
 
+  <circle cx="500" cy="500" r="${(430 / PHI).toFixed(2)}" fill="none" stroke="${tone}" stroke-width="1.6" opacity="${ringPhiOpacity.toFixed(3)}"/>
+  <path d="${spiral}" fill="none" stroke="${tone}" stroke-width="1.4" opacity="${spiralOpacity.toFixed(3)}"/>
+
   <path d="${wave}" fill="none" stroke="${tone}" stroke-width="6" opacity="${waveGlowOpacity.toFixed(3)}" filter="url(#glow)"/>
   <path d="${wave}" fill="none" stroke="rgba(255,255,255,0.82)" stroke-width="2.2" opacity="${waveCoreOpacity.toFixed(3)}"/>
 
@@ -245,8 +274,12 @@ const buildSvg = (payload: PositionSigilPayloadV1, svgHashSeed: string): string 
     <text x="70" y="125">SIDE: ${esc(payload.side)}</text>
     <text x="70" y="160">STAKE μΦ: ${esc(payload.lockedStakeMicro as unknown as string)}</text>
     <text x="70" y="195">SHARES μ: ${esc(payload.sharesMicro as unknown as string)}</text>
+    <text x="70" y="230">PRICE μΦ: ${esc(payload.avgPriceMicro as unknown as string)}</text>
+    <text x="70" y="265">COST μΦ: ${esc(payload.totalCostMicro as unknown as string)}</text>
 
-    <text x="70" y="930">p${esc(String(payload.openedAt.pulse))} • ${esc(payload.marketId as unknown as string).slice(0, 20)}…</text>
+    <text x="70" y="900">MARKET: ${esc(payload.marketId as unknown as string)}</text>
+    <text x="70" y="930">POSITION: ${esc(payload.positionId as unknown as string)}</text>
+    <text x="70" y="960">VAULT: ${esc(payload.vaultId as unknown as string)} • LOCK: ${esc(payload.lockId as unknown as string)}</text>
   </g>
 </svg>`;
 };
