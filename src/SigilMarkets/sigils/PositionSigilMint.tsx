@@ -454,7 +454,6 @@ const canonicalPayloadForSeal = (payload: PositionOrClaimPayload): JSONValue =>
     resolutionPulse: isClaimPayload(payload) ? payload.resolutionPulse : null,
     decisionId: isClaimPayload(payload) ? payload.decisionId ?? null : null,
     payoutPhiMicro: isClaimPayload(payload) ? payload.payoutPhiMicro : null,
-    payoutPhiDisplay: isClaimPayload(payload) ? payload.payoutPhiDisplay : null,
     claimedAt: isClaimPayload(payload) ? payload.claimedAt : null,
     lineageRootSigilId: payload.lineageRootSigilId,
     lineageRootSvgHash: payload.lineageRootSvgHash,
