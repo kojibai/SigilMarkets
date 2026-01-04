@@ -118,6 +118,21 @@ export type LocalQueue = Readonly<{
   subscribe: (fn: () => void) => () => void;
 }>;
 
+export type LocalQueueAutoFlushOptions = Readonly<{
+  /** Interval between background flush attempts. Default: 30_000 */
+  intervalMs?: number;
+  /** Stop after processing N items per flush. Default: Infinity */
+  maxItems?: number;
+  /** If true (default), acquires multi-tab lock before flushing. */
+  useLock?: boolean;
+  /** Optional signal to abort flushes. */
+  signal?: AbortSignal;
+  /** Flush immediately on setup. Default: true */
+  flushOnStart?: boolean;
+  /** Flush when network comes back online. Default: true */
+  flushOnOnline?: boolean;
+}>;
+
 type StorageLike = Readonly<{
   getItem: (k: string) => string | null;
   setItem: (k: string, v: string) => void;
@@ -671,3 +686,57 @@ export function createLocalQueue(config?: LocalQueueConfig): LocalQueue {
  * Import and use directly unless you need isolated queues in tests.
  */
 export const localQueue: LocalQueue = createLocalQueue();
+
+/**
+ * Auto-flush helper for live/offline-first workflows.
+ * Triggers queue flush on start, when network returns, and on a heartbeat interval.
+ */
+export function setupLocalQueueAutoFlush(
+  queue: LocalQueue,
+  handler: LocalQueueHandler,
+  opts?: LocalQueueAutoFlushOptions
+): () => void {
+  const intervalMs = typeof opts?.intervalMs === "number" ? Math.max(1_000, Math.trunc(opts.intervalMs)) : 30_000;
+  const useLock = opts?.useLock ?? true;
+  const maxItems = typeof opts?.maxItems === "number" ? Math.max(0, Math.trunc(opts.maxItems)) : undefined;
+  const signal = opts?.signal;
+  const flushOnStart = opts?.flushOnStart ?? true;
+  const flushOnOnline = opts?.flushOnOnline ?? true;
+
+  let flushing = false;
+  let intervalId: ReturnType<typeof setInterval> | null = null;
+  let onlineHandler: (() => void) | null = null;
+
+  const triggerFlush = (): void => {
+    if (flushing || signal?.aborted) return;
+    flushing = true;
+    queue
+      .flush(handler, { maxItems, useLock, signal })
+      .catch(() => {
+        // swallow errors to keep auto-flush alive
+      })
+      .finally(() => {
+        flushing = false;
+      });
+  };
+
+  if (flushOnStart) triggerFlush();
+
+  if (intervalMs > 0) {
+    intervalId = setInterval(triggerFlush, intervalMs);
+  }
+
+  if (flushOnOnline && typeof window !== "undefined" && typeof window.addEventListener === "function") {
+    onlineHandler = () => {
+      triggerFlush();
+    };
+    window.addEventListener("online", onlineHandler);
+  }
+
+  return () => {
+    if (intervalId != null) clearInterval(intervalId);
+    if (onlineHandler && typeof window !== "undefined" && typeof window.removeEventListener === "function") {
+      window.removeEventListener("online", onlineHandler);
+    }
+  };
+}
