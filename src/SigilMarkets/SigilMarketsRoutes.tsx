@@ -14,6 +14,7 @@ import { ProphecyFeed } from "./views/Prophecy/ProphecyFeed";
 import { ResolutionCenter } from "./views/Resolution/ResolutionCenter";
 
 import { SigilMarketsDock } from "./SigilMarketsDock";
+import { SigilHowTo } from "./SigilHowTo";
 import { SigilShareSheet } from "./sigils/SigilShareSheet";
 import { useSigilMarketsPositionStore } from "./state/positionStore";
 
@@ -120,6 +121,7 @@ export const SigilMarketsRoutes = (props: SigilMarketsRoutesProps) => {
   return (
     <div className="sm-routes" data-sm="routes">
       {content}
+      <SigilHowTo />
       <SigilMarketsDock now={props.now} />
       <SheetsLayer now={props.now} />
     </div>

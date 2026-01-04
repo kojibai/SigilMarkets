@@ -213,6 +213,119 @@ body{
   box-shadow: 0 0 0 6px rgba(191,252,255,0.08);
 }
 
+/* Verahai How-To dock + sheet */
+.vhHowToDock{
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--sm-dock-h) + var(--sm-dock-clearance) + 10px + env(safe-area-inset-bottom));
+  display: flex;
+  justify-content: center;
+  z-index: 49;
+  pointer-events: none;
+}
+
+.vhHowToButton{
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--sm-text);
+  border: 1px solid transparent;
+  background:
+    linear-gradient(135deg, rgba(255,255,255,0.16), rgba(255,255,255,0.06)) padding-box,
+    linear-gradient(135deg, rgba(191,252,255,0.45), rgba(183,163,255,0.32)) border-box;
+  box-shadow: 0 12px 26px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.15);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  transition: transform 140ms ease, box-shadow 160ms ease, border-color 160ms ease, background 200ms ease;
+}
+
+.vhHowToButton:hover{
+  transform: translateY(-1px);
+  box-shadow: 0 16px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.2);
+}
+
+.vhHowToButton:active{
+  transform: translateY(0);
+}
+
+.vhHowToButton:focus-visible{
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(191,252,255,0.6), 0 14px 32px rgba(0,0,0,0.42);
+}
+
+.vhHowToSheet .sm-sheet-panel{
+  background:
+    linear-gradient(160deg, rgba(7,10,16,0.92), rgba(7,10,16,0.98)) padding-box,
+    linear-gradient(120deg, rgba(191,252,255,0.35), rgba(183,163,255,0.25)) border-box;
+  border: 1px solid transparent;
+  box-shadow: 0 28px 70px rgba(0,0,0,0.55);
+}
+
+.vhHowToContent{
+  display: grid;
+  gap: 14px;
+  color: var(--sm-text);
+}
+
+.vhHowToSection h3{
+  margin: 0 0 6px;
+  font-size: 14px;
+  letter-spacing: 0.02em;
+}
+
+.vhHowToSection p{
+  margin: 0;
+  color: var(--sm-dim);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.vhHowToSteps ul{
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--sm-text);
+}
+
+.vhHowToNote{
+  margin: 10px 0 0;
+  color: var(--sm-dimmer);
+  font-size: 12px;
+}
+
+.vhHowToDivider{
+  margin: 6px 0 2px;
+}
+
+.vhHowToToggle{
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--sm-dimmer);
+}
+
+.vhHowToToggle input{
+  width: 16px;
+  height: 16px;
+  accent-color: rgba(191,252,255,0.9);
+}
+
+.vhHowToFooter{
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 6px;
+}
+
 /* Shared page layout */
 .sm-page{
   padding: 0 calc(var(--sm-pad) + env(safe-area-inset-right)) var(--sm-pad) calc(var(--sm-pad) + env(safe-area-inset-left));
