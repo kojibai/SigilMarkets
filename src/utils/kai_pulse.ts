@@ -491,8 +491,23 @@ export function momentFromUTC(
 
 /** Convert a pulse index (±) → KaiMoment using exact bridges. */
 export function momentFromPulse(pulse: number | bigint): KaiMoment {
-  const msEpoch = epochMsFromPulse(pulse);
-  return momentFromUTC(msEpoch);
+  const pμ = microPulsesFromPulse(pulse);
+
+  // Integer pulse index (Euclidean floor toward −∞)
+  const pulseIndex = toSafeNumber(floorDivE(pμ, 1_000_000n));
+
+  // Lattice breakdown
+  const { beat, stepIndex, percentIntoStep } = latticeFromMicroPulses(pμ);
+  const stepPctAcrossBeat = normalizePercentIntoStep(
+    (stepIndex + percentIntoStep) / STEPS_BEAT
+  );
+
+  // Weekday/chakra from absolute day index (ETERNAL path)
+  const dayIndexBI = floorDivE(pμ, N_DAY_MICRO);
+  const weekdayIdx = toSafeNumber(modE(dayIndexBI, b(WEEKDAYS.length)));
+  const { weekday, chakraDay } = chakraForWeekdayIndex(weekdayIdx);
+
+  return { pulse: pulseIndex, beat, stepIndex, stepPctAcrossBeat, chakraDay, weekday };
 }
 
 /** Exact step index from pulse using KKSv1.0 μpulse math (closure-aware). */
