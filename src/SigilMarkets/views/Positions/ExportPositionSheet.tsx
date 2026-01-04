@@ -10,8 +10,10 @@ import { Icon } from "../../ui/atoms/Icon";
 import { Chip } from "../../ui/atoms/Chip";
 import { shortHash } from "../../utils/format";
 import { useSigilMarketsUi } from "../../state/uiStore";
+import { useActiveVault } from "../../state/vaultStore";
+import { useSigilMarketsPositionStore } from "../../state/positionStore";
 import { SigilExportButton } from "../../sigils/SigilExport";
-import { buildPositionSigilSvgFromPayload } from "../../sigils/PositionSigilMint";
+import { buildPositionSigilSvgFromPayload, mintPositionSigil } from "../../sigils/PositionSigilMint";
 
 export type ExportPositionSheetProps = Readonly<{
   open: boolean;
@@ -30,16 +32,29 @@ const statusLabel = (st: string): string => {
 
 export const ExportPositionSheet = (props: ExportPositionSheetProps) => {
   const { actions: ui } = useSigilMarketsUi();
+  const activeVault = useActiveVault();
+  const { actions: positions } = useSigilMarketsPositionStore();
   const p = props.position;
 
   const hasSigil = !!p.sigil?.payload;
   const canCopyLink = !!p.sigil?.url;
   const [svgText, setSvgText] = useState<string | null>(null);
+  const [finalizing, setFinalizing] = useState(false);
 
   const subtitle = useMemo(() => {
     if (!hasSigil) return "Mint your Position Sigil first. Export downloads a ZIP with SVG, PNG, and manifest.";
+    if (needsFinalize) return "Finalize proof to embed resolution before exporting.";
     return "Export your Position Sigil as a ZIP (SVG + PNG + manifest for offline verification).";
-  }, [hasSigil]);
+  }, [hasSigil, needsFinalize]);
+
+  const needsFinalize = useMemo(() => {
+    if (!p.resolution) return false;
+    if (!p.sigil?.payload?.resolution) return true;
+    if (p.sigil.payload.resolution.resolvedPulse !== p.resolution.resolvedPulse) return true;
+    return p.sigil.payload.resolution.status !== p.status;
+  }, [p.resolution, p.sigil?.payload?.resolution, p.status]);
+
+  const canFinalize = needsFinalize && !!activeVault && activeVault.vaultId === p.lock.vaultId;
 
   const filenameBase = useMemo(() => {
     const pid = p.id as unknown as string;
@@ -56,6 +71,34 @@ export const ExportPositionSheet = (props: ExportPositionSheetProps) => {
     } catch {
       ui.toast("error", "Copy failed", "Clipboard not available");
     }
+  };
+
+  const finalize = async (): Promise<void> => {
+    if (!activeVault) {
+      ui.pushSheet({ id: "inhale-glyph", reason: "vault", marketId: p.marketId });
+      return;
+    }
+    if (activeVault.vaultId !== p.lock.vaultId) {
+      ui.toast("warning", "Glyph mismatch", "Inhale the glyph that sealed this position.");
+      ui.pushSheet({ id: "inhale-glyph", reason: "vault", marketId: p.marketId });
+      return;
+    }
+    if (!p.resolution) {
+      ui.toast("info", "Not resolved", "Finalize once the market resolves.");
+      return;
+    }
+
+    setFinalizing(true);
+    const res = await mintPositionSigil(p, activeVault);
+    if (!res.ok) {
+      ui.toast("error", "Finalize failed", res.error);
+      setFinalizing(false);
+      return;
+    }
+
+    positions.attachSigil(p.id, res.sigil, p.resolution.resolvedPulse);
+    ui.toast("success", "Proof finalized", "Position sigil updated with resolution.");
+    setFinalizing(false);
   };
 
   useEffect(() => {
@@ -100,6 +143,12 @@ export const ExportPositionSheet = (props: ExportPositionSheetProps) => {
           >
             Copy link
           </Button>
+
+          {needsFinalize ? (
+            <Button variant="ghost" onClick={finalize} disabled={!canFinalize || finalizing} loading={finalizing}>
+              Finalize proof
+            </Button>
+          ) : null}
 
           {hasSigil ? (
             <SigilExportButton

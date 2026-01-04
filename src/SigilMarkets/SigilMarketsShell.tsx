@@ -18,7 +18,8 @@ import { usePulseTicker } from "./hooks/usePulseTicker";
 import { useSfx } from "./hooks/useSfx";
 
 import { defaultMarketApiConfig, fetchMarkets, type SigilMarketsMarketApiConfig } from "./api/marketApi";
-import type { KaiMoment, KaiPulse, Market, MarketOutcome } from "./types/marketTypes";
+import type { KaiMoment, KaiPulse, Market, MarketOutcome, MarketResolution } from "./types/marketTypes";
+import { ONE_PHI_MICRO } from "./types/marketTypes";
 
 export type SigilMarketsShellProps = Readonly<{
   className?: string;
@@ -158,6 +159,7 @@ const ShellInner = (props: Readonly<{ marketApiConfig?: SigilMarketsMarketApiCon
   }, [marketCfg, now.pulse]);
 
   const lastAutoRefreshPulseRef = useRef<Map<string, KaiPulse>>(new Map());
+  const lastAutoResolvePulseRef = useRef<Map<string, KaiPulse>>(new Map());
 
   useEffect(() => {
     if (marketState.ids.length === 0) return;
@@ -190,6 +192,41 @@ const ShellInner = (props: Readonly<{ marketApiConfig?: SigilMarketsMarketApiCon
 
     if (shouldRefresh) void doFetchMarkets("pulse");
   }, [marketState.byId, marketState.ids, now.pulse]);
+
+  useEffect(() => {
+    if (marketState.ids.length === 0) return;
+
+    const list = marketState.ids
+      .map((id) => marketState.byId[id as unknown as string])
+      .filter((m): m is Market => m !== undefined);
+
+    for (const m of list) {
+      if (isResolvedLike(m.state.status)) continue;
+      if (m.state.resolution) continue;
+
+      const resolveByPulse = m.def.timing.resolveByPulse ?? m.def.timing.closePulse;
+      if (now.pulse < resolveByPulse) continue;
+
+      const key = m.def.id as unknown as string;
+      const last = lastAutoResolvePulseRef.current.get(key) ?? -1;
+      if (last >= resolveByPulse) continue;
+
+      lastAutoResolvePulseRef.current.set(key, resolveByPulse);
+
+      const yesPrice = m.state.pricesMicro.yes as unknown as bigint;
+      const threshold = (ONE_PHI_MICRO as unknown as bigint) / 2n;
+      const outcome: MarketOutcome = yesPrice >= threshold ? "YES" : "NO";
+
+      const resolution: MarketResolution = {
+        marketId: m.def.id,
+        outcome,
+        resolvedPulse: resolveByPulse,
+        oracle: m.def.rules.oracle,
+      };
+
+      markets.applyResolution({ marketId: m.def.id, resolution, status: "resolved" });
+    }
+  }, [marketState.byId, marketState.ids, markets, now.pulse]);
 
   // Apply market resolutions to positions + prophecies exactly once per (marketId,outcome,resolvedPulse).
   const appliedResolutionsRef = useRef<Set<AppliedResolutionKey>>(new Set());

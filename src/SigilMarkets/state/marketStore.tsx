@@ -63,6 +63,7 @@ import {
   type MarketOraclePolicy,
   type MarketOutcome,
   type MarketRules,
+  type MarketResolution,
   type MarketSettlementPolicy,
   type MarketStatus,
   type MarketTiming,
@@ -890,6 +891,7 @@ export type SigilMarketsMarketActions = Readonly<{
   setMarkets: (markets: readonly Market[], opts?: Readonly<{ lastSyncedPulse?: KaiPulse }>) => void;
   upsertMarkets: (markets: readonly Market[], opts?: Readonly<{ lastSyncedPulse?: KaiPulse }>) => void;
   removeMarket: (marketId: MarketId) => void;
+  applyResolution: (req: Readonly<{ marketId: MarketId; resolution: MarketResolution; status?: MarketStatus }>) => void;
   setStatus: (status: MarketStoreStatus, error?: string) => void;
   clearAll: () => void;
   clearCache: () => void;
@@ -1013,6 +1015,43 @@ export const SigilMarketsMarketProvider = (props: Readonly<{ children: ReactNode
       );
     };
 
+    const applyResolution = (req: Readonly<{ marketId: MarketId; resolution: MarketResolution; status?: MarketStatus }>): void => {
+      const key = req.marketId as unknown as string;
+      setAndMaybePersist(
+        (prev) => {
+          const current = prev.byId[key];
+          if (!current) return prev;
+
+          const nextStatus: MarketStatus = req.status ?? "resolved";
+          const nextState = {
+            ...current.state,
+            status: nextStatus,
+            resolution: req.resolution,
+            updatedPulse: Math.max(current.state.updatedPulse ?? 0, req.resolution.resolvedPulse),
+          };
+
+          const nextMarket: Market = {
+            ...current,
+            state: nextState,
+          };
+
+          const byId: Record<string, Market> = { ...prev.byId, [key]: nextMarket };
+          const ids = sortIdsDeterministic(byId);
+
+          return {
+            ...prev,
+            byId,
+            ids,
+            status: "ready",
+            error: undefined,
+            lastSyncedPulse: prev.lastSyncedPulse,
+            cacheSavedAtMs: nowMs(),
+          };
+        },
+        true,
+      );
+    };
+
     const setStatus = (status: MarketStoreStatus, error?: string): void => {
       setState((prev) => ({ ...prev, status, error }));
     };
@@ -1037,6 +1076,7 @@ export const SigilMarketsMarketProvider = (props: Readonly<{ children: ReactNode
       setMarkets,
       upsertMarkets,
       removeMarket,
+      applyResolution,
       setStatus,
       clearAll,
       clearCache,

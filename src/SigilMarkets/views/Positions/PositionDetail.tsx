@@ -5,6 +5,7 @@ import React, { useMemo, useState } from "react";
 import type { KaiMoment, MarketId } from "../../types/marketTypes";
 import type { PositionId } from "../../types/sigilPositionTypes";
 import { useSigilMarketsUi } from "../../state/uiStore";
+import { useActiveVault } from "../../state/vaultStore";
 import { useScrollRestoration } from "../../hooks/useScrollRestoration";
 import { usePosition } from "../../hooks/usePositions";
 import { useMarketById } from "../../state/marketStore";
@@ -28,6 +29,7 @@ export type PositionDetailProps = Readonly<{
 
 export const PositionDetail = (props: PositionDetailProps) => {
   const { state: uiState, actions } = useSigilMarketsUi();
+  const activeVault = useActiveVault();
 
   useScrollRestoration(uiState.route, {
     mode: props.scrollMode,
@@ -101,6 +103,17 @@ export const PositionDetail = (props: PositionDetailProps) => {
   }
 
   const position = p;
+  const hasVaultMatch = !!activeVault && activeVault.vaultId === position.lock.vaultId;
+  const requireClaimAuth = (): void => {
+    if (!activeVault) {
+      actions.pushSheet({ id: "inhale-glyph", reason: "vault", marketId: position.marketId });
+      return;
+    }
+    if (!hasVaultMatch) {
+      actions.toast("warning", "Glyph mismatch", "Inhale the glyph that sealed this position.");
+      actions.pushSheet({ id: "inhale-glyph", reason: "vault", marketId: position.marketId });
+    }
+  };
 
   return (
     <div className="sm-page" data-sm="position-detail">
@@ -146,7 +159,13 @@ export const PositionDetail = (props: PositionDetailProps) => {
             {position.status === "claimable" || position.status === "refundable" ? (
               <Button
                 variant="primary"
-                onClick={() => setClaimOpen(true)}
+                onClick={() => {
+                  if (!hasVaultMatch) {
+                    requireClaimAuth();
+                    return;
+                  }
+                  setClaimOpen(true);
+                }}
                 leftIcon={<Icon name="check" size={14} tone="gold" />}
               >
                 {position.status === "claimable" ? "Claim" : "Refund"}

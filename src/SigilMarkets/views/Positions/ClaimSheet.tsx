@@ -12,10 +12,11 @@ import { formatPhiMicro, formatSharesMicro } from "../../utils/format";
 import { payoutForShares } from "../../utils/math";
 
 import { useSigilMarketsUi } from "../../state/uiStore";
-import { useSigilMarketsVaultStore } from "../../state/vaultStore";
+import { useActiveVault, useSigilMarketsVaultStore } from "../../state/vaultStore";
 import { useSigilMarketsPositionStore } from "../../state/positionStore";
 import { useHaptics } from "../../hooks/useHaptics";
 import { useSfx } from "../../hooks/useSfx";
+import { mintPositionSigil } from "../../sigils/PositionSigilMint";
 
 export type ClaimSheetProps = Readonly<{
   open: boolean;
@@ -26,6 +27,7 @@ export type ClaimSheetProps = Readonly<{
 
 export const ClaimSheet = (props: ClaimSheetProps) => {
   const { actions: ui } = useSigilMarketsUi();
+  const activeVault = useActiveVault();
   const { actions: vault } = useSigilMarketsVaultStore();
   const { actions: positions } = useSigilMarketsPositionStore();
   const haptics = useHaptics();
@@ -36,7 +38,8 @@ export const ClaimSheet = (props: ClaimSheetProps) => {
   const canClaim = p.status === "claimable";
   const canRefund = p.status === "refundable";
 
-  const isActionable = canClaim || canRefund;
+  const hasVaultMatch = !!activeVault && activeVault.vaultId === p.lock.vaultId;
+  const isActionable = (canClaim || canRefund) && hasVaultMatch;
 
   const title = canRefund ? "Refund" : "Claim";
 
@@ -52,7 +55,25 @@ export const ClaimSheet = (props: ClaimSheetProps) => {
 
   const [loading, setLoading] = useState(false);
 
-  const apply = (): void => {
+  const finalizeProof = async (next: PositionRecord, label: string): Promise<void> => {
+    if (!activeVault || activeVault.vaultId !== next.lock.vaultId) return;
+    if (!next.resolution) return;
+
+    const mintRes = await mintPositionSigil(next, activeVault);
+    if (!mintRes.ok) {
+      ui.toast("warning", "Proof not finalized", mintRes.error, { atPulse: props.now.pulse });
+      return;
+    }
+
+    positions.attachSigil(next.id, mintRes.sigil, props.now.pulse);
+    ui.toast("success", `${label} proof updated`, "Position sigil finalized", { atPulse: props.now.pulse });
+  };
+
+  const apply = async (): Promise<void> => {
+    if (!hasVaultMatch) {
+      ui.pushSheet({ id: "inhale-glyph", reason: "vault", marketId: p.marketId });
+      return;
+    }
     if (!isActionable) return;
 
     setLoading(true);
@@ -84,6 +105,18 @@ export const ClaimSheet = (props: ClaimSheetProps) => {
       ui.toast("success", "Refunded", undefined, { atPulse: props.now.pulse });
       sfx.play("resolve");
       haptics.fire("success");
+      const next: PositionRecord = {
+        ...p,
+        status: "refunded",
+        settlement: {
+          settledPulse: props.now.pulse,
+          creditedMicro: p.entry.stakeMicro,
+          debitedMicro: 0n as PhiMicro,
+          note: "Refunded",
+        },
+        updatedPulse: Math.max(p.updatedPulse, props.now.pulse),
+      };
+      await finalizeProof(next, "Refund");
     } else if (canClaim) {
       // Burn/paid the lock (consumed) then credit payout
       vault.transitionLock({
@@ -110,6 +143,18 @@ export const ClaimSheet = (props: ClaimSheetProps) => {
       sfx.play("win");
       haptics.fire("success");
       ui.armConfetti(true);
+      const next: PositionRecord = {
+        ...p,
+        status: "claimed",
+        settlement: {
+          settledPulse: props.now.pulse,
+          creditedMicro: expectedPayout,
+          debitedMicro: p.entry.stakeMicro,
+          note: "Claimed",
+        },
+        updatedPulse: Math.max(p.updatedPulse, props.now.pulse),
+      };
+      await finalizeProof(next, "Claim");
     }
 
     setLoading(false);
@@ -164,7 +209,9 @@ export const ClaimSheet = (props: ClaimSheetProps) => {
         )}
 
         <div className="sm-small" style={{ marginTop: 10 }}>
-          This is MVP settlement logic. We will wire full deterministic settlement to your on-ledger resolution keys next.
+          {!hasVaultMatch
+            ? "Inhale the glyph that sealed this position to unlock claim/refund."
+            : "This is MVP settlement logic. We will wire full deterministic settlement to your on-ledger resolution keys next."}
         </div>
       </div>
     </Sheet>
