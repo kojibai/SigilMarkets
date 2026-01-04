@@ -1643,9 +1643,6 @@ const SigilModal: FC<Props> = ({ onClose }: Props) => {
             <KaiSigil
               ref={sigilRef}
               pulse={pulseForSigil}
-              beat={kksSigil.beat}
-              stepIndex={kksSigil.stepIndex}
-              stepPct={kksSigil.stepPct}
               chakraDay={chakraDay as KaiSigilProps["chakraDay"]}
               size={240}
               hashMode="deterministic"
