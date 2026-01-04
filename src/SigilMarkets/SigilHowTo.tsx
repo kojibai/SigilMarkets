@@ -12,7 +12,10 @@ export const SigilHowTo = () => {
   const [open, setOpen] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [activeStep, setActiveStep] = useState(0);
   const closeRef = useRef<HTMLButtonElement | null>(null);
+  const carouselRef = useRef<HTMLDivElement | null>(null);
+  const rafRef = useRef<number | null>(null);
   const toggleId = useId();
 
   useEffect(() => {
@@ -31,6 +34,22 @@ export const SigilHowTo = () => {
     return () => window.cancelAnimationFrame(id);
   }, [open]);
 
+  useEffect(() => {
+    if (!open) return;
+    setActiveStep(0);
+    if (carouselRef.current) {
+      carouselRef.current.scrollTo({ left: 0 });
+    }
+  }, [open]);
+
+  useEffect(() => {
+    return () => {
+      if (rafRef.current !== null) {
+        window.cancelAnimationFrame(rafRef.current);
+      }
+    };
+  }, []);
+
   const showTrigger = useMemo(() => (hydrated ? !dismissed : true), [dismissed, hydrated]);
 
   const setDismissedPersisted = (next: boolean): void => {
@@ -39,6 +58,54 @@ export const SigilHowTo = () => {
   };
 
   const close = (): void => setOpen(false);
+
+  const steps = useMemo(
+    () => [
+      {
+        title: "What is a Sigil-Glyph?",
+        body: "A Sigil-Glyph is a shareable symbol that carries verifiable data inside the SVG—so the image isn’t just art, it’s proof.",
+      },
+      {
+        title: "What does Verahai do?",
+        body: "Verahai lets you mint, share, and verify Sigil-Glyphs for real claims—so truth can move peer-to-peer, not platform-to-platform.",
+      },
+      {
+        title: "How it works",
+        body: null,
+        bullets: [
+          "Mint: create a sigil for a moment / claim",
+          "Share: send the SVG anywhere",
+          "Verify: confirm the embedded proof + metadata",
+        ],
+        note: "Verification reads the SVG’s embedded metadata—no trust required.",
+      },
+    ],
+    [],
+  );
+
+  const updateActiveStep = (): void => {
+    if (!carouselRef.current) return;
+    const el = carouselRef.current;
+    const stepWidth = el.clientWidth;
+    if (stepWidth <= 0) return;
+    const nextIndex = Math.round(el.scrollLeft / stepWidth);
+    setActiveStep(Math.max(0, Math.min(steps.length - 1, nextIndex)));
+  };
+
+  const onCarouselScroll = (): void => {
+    if (rafRef.current !== null) {
+      window.cancelAnimationFrame(rafRef.current);
+    }
+    rafRef.current = window.requestAnimationFrame(updateActiveStep);
+  };
+
+  const jumpTo = (index: number): void => {
+    const el = carouselRef.current;
+    if (!el) return;
+    const target = Math.max(0, Math.min(steps.length - 1, index));
+    el.scrollTo({ left: el.clientWidth * target, behavior: "smooth" });
+    setActiveStep(target);
+  };
 
   return (
     <>
@@ -71,32 +138,45 @@ export const SigilHowTo = () => {
         }
       >
         <div className="vhHowToContent">
-          <section className="vhHowToSection">
-            <h3>What is a Sigil-Glyph?</h3>
-            <p>
-              A Sigil-Glyph is a shareable symbol that carries verifiable data inside the SVG—so the image isn’t just art,
-              it’s proof.
-            </p>
-          </section>
+          <div className="vhHowToCarousel" ref={carouselRef} onScroll={onCarouselScroll}>
+            {steps.map((step, index) => (
+              <section key={step.title} className="vhHowToSlide" aria-label={`Step ${index + 1} of ${steps.length}`}>
+                <div className="vhHowToSlideTop">
+                  <span className="vhHowToStepBadge">Step {index + 1}</span>
+                  <span className="vhHowToStepCount">
+                    {index + 1} / {steps.length}
+                  </span>
+                </div>
+                <h3>{step.title}</h3>
+                {step.body ? <p>{step.body}</p> : null}
+                {step.bullets ? (
+                  <div className="vhHowToSteps">
+                    <ul>
+                      {step.bullets.map((bullet) => (
+                        <li key={bullet}>{bullet}</li>
+                      ))}
+                    </ul>
+                    {step.note ? <p className="vhHowToNote">{step.note}</p> : null}
+                  </div>
+                ) : null}
+              </section>
+            ))}
+          </div>
 
-          <section className="vhHowToSection">
-            <h3>What does Verahai do?</h3>
-            <p>
-              Verahai lets you mint, share, and verify Sigil-Glyphs for real claims—so truth can move peer-to-peer, not
-              platform-to-platform.
-            </p>
-          </section>
+          <div className="vhHowToDots" role="tablist" aria-label="How to steps">
+            {steps.map((_, index) => (
+              <button
+                key={`dot-${index}`}
+                type="button"
+                className={`vhHowToDot ${index === activeStep ? "is-active" : ""}`}
+                aria-label={`Go to step ${index + 1}`}
+                aria-selected={index === activeStep}
+                onClick={() => jumpTo(index)}
+              />
+            ))}
+          </div>
 
           <Divider className="vhHowToDivider" />
-
-          <div className="vhHowToSteps">
-            <ul>
-              <li>Mint: create a sigil for a moment / claim</li>
-              <li>Share: send the SVG anywhere</li>
-              <li>Verify: confirm the embedded proof + metadata</li>
-            </ul>
-            <p className="vhHowToNote">Verification reads the SVG’s embedded metadata—no trust required.</p>
-          </div>
 
           <label className="vhHowToToggle" htmlFor={toggleId}>
             <input
