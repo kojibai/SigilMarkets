@@ -7,6 +7,7 @@ import { Divider } from "./ui/atoms/Divider";
 import { Icon } from "./ui/atoms/Icon";
 import { Sheet } from "./ui/atoms/Sheet";
 import { decodeBoolean, loadFromStorage, saveToStorage, SM_HOWTO_DISMISSED_KEY } from "./state/persistence";
+import { useSigilMarketsUi } from "./state/uiStore";
 
 // NOTE: this is your current path. Keep it exactly as you wrote it.
 import SigilModal from "../components/SigilModal";
@@ -30,6 +31,8 @@ export const SigilHowTo = () => {
   const [dismissed, setDismissed] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [activeStep, setActiveStep] = useState(0);
+
+  const { actions: ui } = useSigilMarketsUi();
 
   // Step 1 action opens SigilModal (mint window)
   const [sigilModalOpen, setSigilModalOpen] = useState(false);
@@ -107,6 +110,11 @@ export const SigilHowTo = () => {
     setOpen(true);
   };
 
+  const openInhaleFromStep2 = (): void => {
+    setOpen(false);
+    ui.pushSheet({ id: "inhale-glyph", reason: "auth" });
+  };
+
   const steps: readonly HowToStep[] = useMemo(
     () => [
       {
@@ -137,6 +145,11 @@ export const SigilHowTo = () => {
           "Enter: Your Vault + positions are now bound to the same ΦKey proof lineage.",
           "Access Vault: Tap “Vault” in the bottom nav after login to deposit, withdraw, or view balances.",
         ],
+        action: {
+          label: "Inhale + Activate Vault",
+          hint: "Upload your Sigil-Glyph and optionally add your first deposit in the same step.",
+          onClick: openInhaleFromStep2,
+        },
         note:
           "Bridge to what you already know: this is like “Sign in with Apple,” but instead of Apple being the gatekeeper, the file is the credential and verification is self-contained. You carry your login. You carry your receipts. You carry your value.",
       },
