@@ -111,6 +111,7 @@ export const ExportPositionSheet = (props: ExportPositionSheetProps) => {
 
     const updatedPulse = p.resolution?.resolvedPulse ?? p.updatedPulse;
     positionStore.attachSigil(p.id, res.sigil, updatedPulse);
+    setSvgText(res.svgText);
     ui.toast("success", "Proof finalized", "Position sigil updated with resolution.");
     setFinalizing(false);
   };
