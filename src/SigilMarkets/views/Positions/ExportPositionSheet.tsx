@@ -41,12 +41,6 @@ export const ExportPositionSheet = (props: ExportPositionSheetProps) => {
   const [svgText, setSvgText] = useState<string | null>(null);
   const [finalizing, setFinalizing] = useState(false);
 
-  const subtitle = useMemo(() => {
-    if (!hasSigil) return "Mint your Position Sigil first. Export downloads a ZIP with SVG, PNG, and manifest.";
-    if (needsFinalize) return "Finalize proof to embed resolution before exporting.";
-    return "Export your Position Sigil as a ZIP (SVG + PNG + manifest for offline verification).";
-  }, [hasSigil, needsFinalize]);
-
   const needsFinalize = useMemo(() => {
     if (!p.resolution) return false;
     if (!p.sigil?.payload?.resolution) return true;
@@ -55,6 +49,12 @@ export const ExportPositionSheet = (props: ExportPositionSheetProps) => {
   }, [p.resolution, p.sigil?.payload?.resolution, p.status]);
 
   const canFinalize = needsFinalize && !!activeVault && activeVault.vaultId === p.lock.vaultId;
+
+  const subtitle = useMemo(() => {
+    if (!hasSigil) return "Mint your Position Sigil first. Export downloads a ZIP with SVG, PNG, and manifest.";
+    if (needsFinalize) return "Finalize proof to embed resolution before exporting.";
+    return "Export your Position Sigil as a ZIP (SVG + PNG + manifest for offline verification).";
+  }, [hasSigil, needsFinalize]);
 
   const filenameBase = useMemo(() => {
     const pid = p.id as unknown as string;
