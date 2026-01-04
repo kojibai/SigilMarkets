@@ -392,7 +392,8 @@ const submitRemoteTrade = async (cfg: SigilMarketsPositionApiConfig, input: Exec
     side: input.request.side,
     orderType: input.request.orderType,
     stakeMicro: String(input.request.stakeMicro as unknown as bigint),
-    limitPriceMicro: input.request.limitPriceMicro ? String(input.request.limitPriceMicro as unknown as bigint) : undefined,
+    limitPriceMicro:
+      input.request.limitPriceMicro !== undefined ? String(input.request.limitPriceMicro as unknown as bigint) : undefined,
     maxSlippageBps: input.request.maxSlippageBps,
     nowPulse: input.now.pulse,
     nonce: input.nonce,
