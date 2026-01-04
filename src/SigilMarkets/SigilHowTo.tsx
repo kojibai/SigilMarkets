@@ -230,7 +230,7 @@ export const SigilHowTo = () => {
             type="button"
             className="vhHowToButton"
             onClick={() => setOpen(true)}
-            aria-label="How to learn about Sigil-Glyphs"
+            aria-label="How to learn about Vérahai"
           >
             <span className="vhHowToButtonLabel">How to</span>
             <Icon name="spark" size={12} tone="dim" className="vhHowToButtonIcon" />
@@ -241,8 +241,8 @@ export const SigilHowTo = () => {
       <Sheet
         open={open}
         onClose={close}
-        title="Sigil-Glyphs"
-        subtitle="Mint one once. Prove it forever."
+        title="Vérahai"
+        subtitle="Breath, sealed as law."
         className="vhHowToSheet"
         footer={
           <div className="vhHowToFooter">
