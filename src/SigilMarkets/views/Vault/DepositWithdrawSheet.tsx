@@ -225,8 +225,6 @@ export const DepositWithdrawSheet = (props: DepositWithdrawSheetProps) => {
             <KaiSigil
               ref={sigilRef}
               pulse={transferMoment.pulse}
-              beat={transferMoment.beat}
-              stepIndex={transferMoment.stepIndex}
               chakraDay={transferMoment.chakraDay}
               userPhiKey={String(props.vault.owner.userPhiKey)}
               kaiSignature={String(props.vault.owner.kaiSignature)}
