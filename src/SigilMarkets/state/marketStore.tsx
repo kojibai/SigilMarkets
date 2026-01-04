@@ -890,6 +890,8 @@ export type SigilMarketsMarketActions = Readonly<{
   setMarkets: (markets: readonly Market[], opts?: Readonly<{ lastSyncedPulse?: KaiPulse }>) => void;
   upsertMarkets: (markets: readonly Market[], opts?: Readonly<{ lastSyncedPulse?: KaiPulse }>) => void;
   removeMarket: (marketId: MarketId) => void;
+  updateMarketStatus: (args: Readonly<{ marketId: MarketId; status: MarketStatus; updatedPulse?: KaiPulse }>) => void;
+  resolveMarket: (args: Readonly<{ marketId: MarketId; resolution: BinaryMarketState["resolution"] }>) => void;
   setStatus: (status: MarketStoreStatus, error?: string) => void;
   clearAll: () => void;
   clearCache: () => void;
@@ -1013,6 +1015,64 @@ export const SigilMarketsMarketProvider = (props: Readonly<{ children: ReactNode
       );
     };
 
+    const updateMarketStatus = (args: Readonly<{ marketId: MarketId; status: MarketStatus; updatedPulse?: KaiPulse }>): void => {
+      const key = args.marketId as unknown as string;
+      setAndMaybePersist(
+        (prev) => {
+          const existing = prev.byId[key];
+          if (!existing) return prev;
+          const updatedPulse = args.updatedPulse ?? existing.state.updatedPulse;
+          if (existing.state.status === args.status && updatedPulse === existing.state.updatedPulse) return prev;
+          const nextMarket: Market = {
+            ...existing,
+            state: {
+              ...existing.state,
+              status: args.status,
+              updatedPulse: Math.max(existing.state.updatedPulse, updatedPulse),
+            },
+          };
+          return {
+            ...prev,
+            byId: {
+              ...prev.byId,
+              [key]: nextMarket,
+            },
+          };
+        },
+        true,
+      );
+    };
+
+    const resolveMarket = (args: Readonly<{ marketId: MarketId; resolution: BinaryMarketState["resolution"] }>): void => {
+      if (!args.resolution) return;
+      const key = args.marketId as unknown as string;
+      setAndMaybePersist(
+        (prev) => {
+          const existing = prev.byId[key];
+          if (!existing) return prev;
+          const nextStatus = args.resolution.outcome === "VOID" ? "voided" : "resolved";
+          const resolvedPulse = args.resolution.resolvedPulse;
+          const nextMarket: Market = {
+            ...existing,
+            state: {
+              ...existing.state,
+              status: nextStatus,
+              resolution: args.resolution,
+              updatedPulse: Math.max(existing.state.updatedPulse, resolvedPulse),
+            },
+          };
+          return {
+            ...prev,
+            byId: {
+              ...prev.byId,
+              [key]: nextMarket,
+            },
+          };
+        },
+        true,
+      );
+    };
+
     const setStatus = (status: MarketStoreStatus, error?: string): void => {
       setState((prev) => ({ ...prev, status, error }));
     };
@@ -1037,6 +1097,8 @@ export const SigilMarketsMarketProvider = (props: Readonly<{ children: ReactNode
       setMarkets,
       upsertMarkets,
       removeMarket,
+      updateMarketStatus,
+      resolveMarket,
       setStatus,
       clearAll,
       clearCache,

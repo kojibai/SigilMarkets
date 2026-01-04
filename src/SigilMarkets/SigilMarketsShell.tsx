@@ -18,7 +18,7 @@ import { usePulseTicker } from "./hooks/usePulseTicker";
 import { useSfx } from "./hooks/useSfx";
 
 import { defaultMarketApiConfig, fetchMarkets, type SigilMarketsMarketApiConfig } from "./api/marketApi";
-import type { KaiMoment, KaiPulse, Market, MarketOutcome } from "./types/marketTypes";
+import type { KaiMoment, KaiPulse, Market, MarketOutcome, MarketResolution } from "./types/marketTypes";
 
 export type SigilMarketsShellProps = Readonly<{
   className?: string;
@@ -44,9 +44,38 @@ const resolutionKey = (m: Market): AppliedResolutionKey => {
   return `${m.def.id}:${rid.outcome}:${rid.resolvedPulse}`;
 };
 
+const resolutionPulseKey = (marketId: Market["def"]["id"], resolvedPulse: KaiPulse): string =>
+  `${marketId as unknown as string}:${resolvedPulse}`;
+
 // Toggle is a small app-level type; keep this predicate permissive and runtime-safe.
 const isToggleOn = (t: unknown): boolean =>
   t === true || t === 1 || t === "on" || t === "true" || t === "enabled";
+
+/** Tiny deterministic PRNG seed (xorshift32-style) from a string seed. */
+const seed32 = (seed: string): number => {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < seed.length; i += 1) {
+    h ^= seed.charCodeAt(i);
+    h = (h + ((h << 1) >>> 0) + ((h << 4) >>> 0) + ((h << 7) >>> 0) + ((h << 8) >>> 0) + ((h << 24) >>> 0)) >>> 0;
+  }
+  return h >>> 0;
+};
+
+const deterministicOutcomeForMarket = (m: Market, resolvedPulse: KaiPulse): MarketOutcome => {
+  const seed = `${m.def.id as unknown as string}:${resolvedPulse}:${m.def.rules.yesCondition}`;
+  const h = seed32(seed);
+  return h % 2 === 0 ? "YES" : "NO";
+};
+
+const buildDeterministicResolution = (m: Market, resolvedPulse: KaiPulse): MarketResolution => ({
+  marketId: m.def.id,
+  outcome: deterministicOutcomeForMarket(m, resolvedPulse),
+  resolvedPulse,
+  oracle: m.def.rules.oracle,
+  evidence: {
+    summary: "Deterministic local resolver (seeded by marketId + resolvedPulse).",
+  },
+});
 
 const ShellInner = (props: Readonly<{ marketApiConfig?: SigilMarketsMarketApiConfig; windowScroll: boolean }>) => {
   const { state: uiState, actions: ui } = useSigilMarketsUi();
@@ -158,6 +187,7 @@ const ShellInner = (props: Readonly<{ marketApiConfig?: SigilMarketsMarketApiCon
   }, [marketCfg, now.pulse]);
 
   const lastAutoRefreshPulseRef = useRef<Map<string, KaiPulse>>(new Map());
+  const appliedDeterministicResolutionsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (marketState.ids.length === 0) return;
@@ -166,10 +196,30 @@ const ShellInner = (props: Readonly<{ marketApiConfig?: SigilMarketsMarketApiCon
       .map((id) => marketState.byId[id as unknown as string])
       .filter((m): m is Market => m !== undefined);
 
+    const useLocalResolver = !marketCfg.baseUrl;
     let shouldRefresh = false;
 
     for (const m of list) {
       if (isResolvedLike(m.state.status)) continue;
+
+      const closePulse = m.def.timing.closePulse;
+      const resolvePulse = Math.max(
+        closePulse,
+        m.def.timing.resolveEarliestPulse ?? 0,
+        m.def.timing.resolveByPulse ?? 0,
+      ) as KaiPulse;
+
+      if (useLocalResolver && m.state.status === "open" && now.pulse >= closePulse) {
+        markets.updateMarketStatus({ marketId: m.def.id, status: "closed", updatedPulse: closePulse });
+      }
+
+      if (useLocalResolver && now.pulse >= resolvePulse && !m.state.resolution) {
+        const rKey = resolutionPulseKey(m.def.id, resolvePulse);
+        if (!appliedDeterministicResolutionsRef.current.has(rKey)) {
+          appliedDeterministicResolutionsRef.current.add(rKey);
+          markets.resolveMarket({ marketId: m.def.id, resolution: buildDeterministicResolution(m, resolvePulse) });
+        }
+      }
 
       let boundaryPulse: KaiPulse | null = null;
       if (m.state.status === "open") boundaryPulse = m.def.timing.closePulse;
@@ -189,7 +239,7 @@ const ShellInner = (props: Readonly<{ marketApiConfig?: SigilMarketsMarketApiCon
     }
 
     if (shouldRefresh) void doFetchMarkets("pulse");
-  }, [marketState.byId, marketState.ids, now.pulse]);
+  }, [marketCfg.baseUrl, marketState.byId, marketState.ids, markets, now.pulse]);
 
   // Apply market resolutions to positions + prophecies exactly once per (marketId,outcome,resolvedPulse).
   const appliedResolutionsRef = useRef<Set<AppliedResolutionKey>>(new Set());
