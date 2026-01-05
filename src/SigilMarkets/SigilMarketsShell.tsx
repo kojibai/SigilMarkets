@@ -316,14 +316,18 @@ export const SigilMarketsShell = (props: SigilMarketsShellProps) => {
   const viewportSize = useVisualViewportSize();
   const rootStyle = useMemo(() => {
     const next = { ...(props.style ?? {}) } as React.CSSProperties & Record<string, string>;
-    if (viewportSize.height > 0) {
-      next["--sm-vh"] = `${viewportSize.height}px`;
+    const safeHeight = viewportSize.height + viewportSize.offsetTop;
+    if (safeHeight > 0) {
+      next["--sm-vh"] = `${safeHeight}px`;
     }
     if (viewportSize.width > 0) {
       next["--sm-vw"] = `${viewportSize.width}px`;
     }
+    if (viewportSize.offsetTop > 0) {
+      next["--sm-vv-top"] = `${viewportSize.offsetTop}px`;
+    }
     return next;
-  }, [props.style, viewportSize.height, viewportSize.width]);
+  }, [props.style, viewportSize.height, viewportSize.offsetTop, viewportSize.width]);
 
   return (
     <div className={props.className} style={rootStyle} data-sm-root="1">
