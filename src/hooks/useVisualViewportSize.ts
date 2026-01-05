@@ -14,7 +14,7 @@ type VVStore = {
 };
 
 const vvStore: VVStore = {
-  size: { width: 0, height: 0 },
+  size: { width: 0, height: 0, offsetTop: 0, offsetLeft: 0 }, // ✅ FIX
   subs: new Set(),
   listening: false,
   rafId: null,
@@ -22,7 +22,10 @@ const vvStore: VVStore = {
 };
 
 function readVVNow(): VVSize {
-  if (typeof window === "undefined") return { width: 0, height: 0, offsetTop: 0, offsetLeft: 0 };
+  if (typeof window === "undefined") {
+    return { width: 0, height: 0, offsetTop: 0, offsetLeft: 0 };
+  }
+
   const vv = window.visualViewport;
   if (vv) {
     return {
@@ -32,7 +35,13 @@ function readVVNow(): VVSize {
       offsetLeft: Math.round(vv.offsetLeft),
     };
   }
-  return { width: window.innerWidth, height: window.innerHeight, offsetTop: 0, offsetLeft: 0 };
+
+  return {
+    width: window.innerWidth,
+    height: window.innerHeight,
+    offsetTop: 0,
+    offsetLeft: 0,
+  };
 }
 
 function startVVListeners(): void {
@@ -45,13 +54,16 @@ function startVVListeners(): void {
     vvStore.rafId = null;
     const next = readVVNow();
     const prev = vvStore.size;
+
     if (
       next.width === prev.width &&
       next.height === prev.height &&
       next.offsetTop === prev.offsetTop &&
       next.offsetLeft === prev.offsetLeft
-    )
+    ) {
       return;
+    }
+
     vvStore.size = next;
     vvStore.subs.forEach((fn) => fn(next));
   };
@@ -64,19 +76,17 @@ function startVVListeners(): void {
   const vv = window.visualViewport;
 
   window.addEventListener("resize", schedule, { passive: true });
-  if (vv) {
-    vv.addEventListener("resize", schedule, { passive: true });
-  }
+  if (vv) vv.addEventListener("resize", schedule, { passive: true });
 
   vvStore.cleanup = (): void => {
     if (vvStore.rafId !== null) {
       window.cancelAnimationFrame(vvStore.rafId);
       vvStore.rafId = null;
     }
+
     window.removeEventListener("resize", schedule);
-    if (vv) {
-      vv.removeEventListener("resize", schedule);
-    }
+    if (vv) vv.removeEventListener("resize", schedule);
+
     vvStore.cleanup = null;
     vvStore.listening = false;
   };
