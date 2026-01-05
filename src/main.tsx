@@ -13,6 +13,7 @@ const queryClient = new QueryClient();
 registerSW({ immediate: true });
 
 const SigilPage = React.lazy(() => import('./pages/SigilPage/SigilPage'));
+const KeyStream = React.lazy(() => import('./components/SigilExplorer'));
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
@@ -23,6 +24,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             <Route path="s" element={<SigilPage />} />
             <Route path="s/:hash" element={<SigilPage />} />
             <Route path="*" element={<SigilMarketsShell />} />
+            <Route path="/keystream" element={<KeyStream />} />
           </Routes>
         </Suspense>
       </BrowserRouter>

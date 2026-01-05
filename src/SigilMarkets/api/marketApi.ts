@@ -865,22 +865,8 @@ mk("m_markets_position_bias", "position-bias", "Is today positioned early in the
   description:
     "Value emerges from where you are, not what you expect. YES if today sits in the early half of the lattice.",
 }),
-mk("m_markets_arc_pressure", "arc-pressure", "Is pressure building or releasing today?", {
-    category: CAT.FINANCE,
-  tags: ["kks", "arc"],
-  iconEmoji: "⚡",
-  closeInPulses: P_DAY,
-  description:
-    "Arcs compress, then release. YES means pressure is still building.",
-}),
-mk("m_crypto_proof_tone", "proof-tone", "Does the proof lean light or heavy today?", {
-  category: CAT.CRYPTO,
-  tags: ["hash", "proof"],
-  iconEmoji: "🔐",
-  closeInPulses: P_DAY,
-  description:
-    "Read only the first mark of the proof. YES if it lands in the lighter half. Proof has tone.",
-}),
+
+
 mk("m_crypto_proof_closure", "proof-closure", "Did the proof close cleanly?", {
   category: CAT.CRYPTO,
   tags: ["hash", "closure"],
