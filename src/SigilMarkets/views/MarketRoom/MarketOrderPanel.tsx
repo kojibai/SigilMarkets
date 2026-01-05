@@ -55,7 +55,7 @@ export const MarketOrderPanel = (props: MarketOrderPanelProps) => {
   const statusMessage = useMemo(() => {
     if (marketStatus === "closed") return "Trading closed • awaiting resolution.";
     if (marketStatus === "resolving") return "Resolution in progress.";
-    if (marketStatus === "resolved") return "Resolved • claims available.";
+    if (marketStatus === "resolved") return "Resolved • victories available.";
     if (marketStatus === "voided") return "Market voided.";
     if (marketStatus === "canceled") return "Market canceled.";
     return null;

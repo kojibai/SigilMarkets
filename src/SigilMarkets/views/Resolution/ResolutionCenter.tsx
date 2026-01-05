@@ -102,7 +102,7 @@ export const ResolutionCenter = (props: ResolutionCenterProps) => {
             <CardContent>
               <div className="sm-title">Awaiting resolution.</div>
               <div className="sm-subtitle" style={{ marginTop: 8 }}>
-                This market will be resolved by its oracle policy. When posted, you’ll be able to claim/refund positions.
+                This market will be resolved by its oracle policy. When posted, you’ll be able to seal victory/refund positions.
               </div>
             </CardContent>
           </Card>
