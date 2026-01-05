@@ -1,7 +1,7 @@
 // SigilMarkets/views/Prophecy/ProphecySigilCard.tsx
 "use client";
 
-import React, { useMemo } from "react";
+import { useMemo } from "react";
 import type { KaiMoment } from "../../types/marketTypes";
 import type { ProphecyRecord } from "../../types/prophecySigilTypes";
 import { Card, CardContent } from "../../ui/atoms/Card";
@@ -71,7 +71,7 @@ export const ProphecySigilCard = (props: ProphecySigilCardProps) => {
           <div className="sm-proph-sigil-actions">
             {sigil?.url ? (
               <a className="sm-pill" href={sigil.url} target="_blank" rel="noreferrer">
-                <Icon name="share" size={14} tone="dim" /> view svg
+                <Icon name="share" size={14} tone="dim" /> view sigil
               </a>
             ) : null}
 

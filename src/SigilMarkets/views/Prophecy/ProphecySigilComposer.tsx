@@ -221,7 +221,7 @@ export const ProphecySigilComposer = (props: ProphecySigilComposerProps) => {
               Add URL
             </Button>
           </div>
-          <input type="file" onChange={onPickFile} />
+          <input type="file"  className="sm-proph-sigil-file-input" onChange={onPickFile} />
           {evidenceItems.length ? (
             <div className="sm-proph-sigil-evidence-list">
               {evidenceItems.map((item, idx) => (
