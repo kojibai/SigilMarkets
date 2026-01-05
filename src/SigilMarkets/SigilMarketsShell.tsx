@@ -11,6 +11,7 @@ import { SigilMarketsMarketProvider, useSigilMarketsMarketStore } from "./state/
 import { SigilMarketsVaultProvider } from "./state/vaultStore";
 import { SigilMarketsPositionProvider, useSigilMarketsPositionStore } from "./state/positionStore";
 import { SigilMarketsFeedProvider, useSigilMarketsFeedStore } from "./state/feedStore";
+import { SigilMarketsProphecySigilProvider } from "./state/prophecySigilStore";
 import { SigilMarketsRuntimeConfigProvider, useSigilMarketsRuntimeConfig } from "./state/runtimeConfig";
 
 import { SigilMarketsRoutes } from "./SigilMarketsRoutes";
@@ -325,7 +326,9 @@ export const SigilMarketsShell = (props: SigilMarketsShellProps) => {
             <SigilMarketsVaultProvider>
               <SigilMarketsPositionProvider>
                 <SigilMarketsFeedProvider>
-                  <ShellInner windowScroll={windowScroll} />
+                  <SigilMarketsProphecySigilProvider>
+                    <ShellInner windowScroll={windowScroll} />
+                  </SigilMarketsProphecySigilProvider>
                 </SigilMarketsFeedProvider>
               </SigilMarketsPositionProvider>
             </SigilMarketsVaultProvider>
