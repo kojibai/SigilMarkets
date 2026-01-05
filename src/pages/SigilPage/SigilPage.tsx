@@ -142,6 +142,10 @@ import {
   currentCanonical as currentCanonicalUtil,
   currentToken as currentTokenUtil,
 } from "../../utils/urlShort";
+import { epochMsFromPulse } from "../../utils/kai_pulse";
+import { formatPhiMicro } from "../../SigilMarkets/utils/format";
+import { parsePhiMicro } from "../../SigilMarkets/utils/guards";
+import type { ProphecySigilPayloadV1 } from "../../SigilMarkets/types/prophecySigilTypes";
 // registry.ts
 import {
   buildClaim,
@@ -456,6 +460,49 @@ export default function SigilPage() {
   );
   void setLoading;
   const payload = payloadState;
+
+  type ProphecyDetails = Readonly<{
+    text: string;
+    escrowLabel: string | null;
+    expirationPulse: number | null;
+    expirationDate: string | null;
+  }>;
+
+  const prophecyPayload = useMemo(() => {
+    const raw = (payload as SigilPayload & { prophecyPayload?: unknown } | null)?.prophecyPayload;
+    if (!raw || typeof raw !== "object") return null;
+    const candidate = raw as ProphecySigilPayloadV1;
+    return candidate.kind === "prophecy" ? candidate : null;
+  }, [payload]);
+
+  const prophecyDetails = useMemo<ProphecyDetails | null>(() => {
+    if (!prophecyPayload) return null;
+    const text = typeof prophecyPayload.text === "string" ? prophecyPayload.text : "";
+    const escrowMicro = parsePhiMicro(prophecyPayload.escrowPhiMicro);
+    const escrowLabel =
+      escrowMicro != null
+        ? formatPhiMicro(escrowMicro, { withUnit: true, maxDecimals: 6, trimZeros: true })
+        : null;
+    const expirationPulse =
+      typeof prophecyPayload.expirationPulse === "number" ? prophecyPayload.expirationPulse : null;
+    const expirationDate = (() => {
+      if (expirationPulse == null) return null;
+      const msEpoch = Number(epochMsFromPulse(expirationPulse));
+      if (!Number.isFinite(msEpoch)) return null;
+      return new Date(msEpoch).toLocaleString();
+    })();
+    return {
+      text,
+      escrowLabel,
+      expirationPulse,
+      expirationDate,
+    };
+  }, [prophecyPayload]);
+
+  const isProphecySigil = useMemo(() => {
+    const sigilKind = (payload as SigilPayload & { sigilKind?: string } | null)?.sigilKind;
+    return sigilKind === "prophecy" || prophecyPayload?.kind === "prophecy";
+  }, [payload, prophecyPayload]);
 
   // live Kai (eternal)
   const { pulse: currentPulse, msToNextPulse } = useKaiTicker();
@@ -877,6 +924,15 @@ useEffect(() => {
 
   /* Build OG image */
   useEffect(() => {
+    if (isProphecySigil) {
+      setOgImgUrl(null);
+      setMeta("property", "og:image", "");
+      setMeta("property", "og:image:alt", "");
+      setMeta("property", "og:image:width", "");
+      setMeta("property", "og:image:height", "");
+      setMeta("name", "twitter:image", "");
+      return;
+    }
     const stop = runOgImageEffect({
       stageId: "sigil-stage",
       payload: payload ? { ...payload } : null,
@@ -887,7 +943,7 @@ useEffect(() => {
       seoDesc: seoStrings.desc,
     });
     return stop;
-  }, [payload, localHash, sigilSize, seoStrings.title, seoStrings.desc]);
+  }, [payload, localHash, sigilSize, seoStrings.title, seoStrings.desc, isProphecySigil]);
 
   /* allow page scroll */
   useLayoutEffect(() => {
@@ -1679,6 +1735,16 @@ if (linkStatus === "archived" && !ALLOW_ARCHIVED_VERIFIED) return;           // 
   let cancelled = false;
   (async () => {
     try {
+      if (isProphecySigil) {
+        if (typeof payload.kaiSignature !== "string" || typeof payload.userPhiKey !== "string") return;
+        const derivedPhi = await derivePhiKeyFromSigCanon(payload.kaiSignature);
+        const phiOk = payload.userPhiKey.toLowerCase() === derivedPhi.toLowerCase();
+        if (!cancelled && phiOk && verified !== "verified") {
+          setVerified("verified");
+        }
+        return;
+      }
+
       const stepsNum: number = (payload.stepsPerBeat ?? STEPS_PER_BEAT) as number;
       const sealedIdx = stepIndexFromPulse(payload.pulse, stepsNum);
 const intention = readIntentionSigil(payload); // must not depend on debits/originalAmount/…!
@@ -1718,7 +1784,7 @@ if (!cancelled && sigmaOk && phiOk && verified !== "verified") {
   })();
 
   return () => { cancelled = true; };
-}, [payload, glyphAuth, verified, linkStatus]);
+}, [payload, glyphAuth, verified, linkStatus, isProphecySigil]);
 
 
 useEffect(() => {
@@ -2831,6 +2897,7 @@ useEffect(() => {
             balancePhi={displayedChipPhi ?? 0}
             balanceUsd={chipUsd ?? 0}
             stage={stageNode}
+            prophecyDetails={prophecyDetails ?? undefined}
           />{/* Breath Proof overlay (portal) */}
           {proofOpen && breathProof &&
             createPortal(
