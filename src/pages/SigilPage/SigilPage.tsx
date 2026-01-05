@@ -924,6 +924,15 @@ useEffect(() => {
 
   /* Build OG image */
   useEffect(() => {
+    if (isProphecySigil) {
+      setOgImgUrl(null);
+      setMeta("property", "og:image", "");
+      setMeta("property", "og:image:alt", "");
+      setMeta("property", "og:image:width", "");
+      setMeta("property", "og:image:height", "");
+      setMeta("name", "twitter:image", "");
+      return;
+    }
     const stop = runOgImageEffect({
       stageId: "sigil-stage",
       payload: payload ? { ...payload } : null,
@@ -934,7 +943,7 @@ useEffect(() => {
       seoDesc: seoStrings.desc,
     });
     return stop;
-  }, [payload, localHash, sigilSize, seoStrings.title, seoStrings.desc]);
+  }, [payload, localHash, sigilSize, seoStrings.title, seoStrings.desc, isProphecySigil]);
 
   /* allow page scroll */
   useLayoutEffect(() => {
