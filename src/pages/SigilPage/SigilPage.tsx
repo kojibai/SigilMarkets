@@ -825,6 +825,7 @@ useEffect(() => {
   /* SEO / Sharing text */
   const [ogImgUrl, setOgImgUrl] = useState<string | null>(null);
   const deferredPayload = useDeferredValue(payload);
+  const ogCapturedRef = useRef<string | null>(null);
 
   const seoStrings = useMemo(() => {
     const stepsNum: number = (deferredPayload?.stepsPerBeat ?? STEPS_PER_BEAT) as number;
@@ -923,9 +924,18 @@ useEffect(() => {
     setJsonLd("sigil-jsonld", jsonld);
   }, [absUrl, seoStrings.title, seoStrings.desc, payload, ogImgUrl, localHash, historyLite?.length]);
 
+  const ogKey = useMemo(() => {
+    if (!payload) return null;
+    const canon = (payload.canonicalHash ?? localHash ?? "").toLowerCase();
+    return `${canon}|${payload.pulse}|${payload.beat}|${payload.stepIndex ?? ""}|${
+      payload.chakraDay ?? ""
+    }`;
+  }, [payload, localHash]);
+
   /* Build OG image */
   useEffect(() => {
     if (isProphecySigil) {
+      ogCapturedRef.current = null;
       setOgImgUrl(null);
       setMeta("property", "og:image", "");
       setMeta("property", "og:image:alt", "");
@@ -934,17 +944,26 @@ useEffect(() => {
       setMeta("name", "twitter:image", "");
       return;
     }
+    if (!payload || !ogKey) return;
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+    if (ogCapturedRef.current === ogKey) return;
+
+    const setOgImgUrlOnce = (next: string | null) => {
+      if (next && ogCapturedRef.current !== ogKey) ogCapturedRef.current = ogKey;
+      setOgImgUrl(next);
+    };
+
     const stop = runOgImageEffect({
       stageId: "sigil-stage",
       payload: payload ? { ...payload } : null,
       localHash,
-      setOgImgUrl,
+      setOgImgUrl: setOgImgUrlOnce,
       setMeta,
       seoTitle: seoStrings.title,
       seoDesc: seoStrings.desc,
     });
     return stop;
-  }, [payload, localHash, sigilSize, seoStrings.title, seoStrings.desc, isProphecySigil]);
+  }, [payload, localHash, seoStrings.title, seoStrings.desc, isProphecySigil, ogKey]);
 
   /* allow page scroll */
   useLayoutEffect(() => {
