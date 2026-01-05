@@ -31,6 +31,7 @@ import { useKaiTicker } from "../hooks/useKaiTicker";
 import { useValuation } from "./SigilPage/useValuation";
 import type { SigilMetadataLite } from "../utils/valuation";
 import { resolveGlyphPhi } from "../utils/glyphValue";
+import { extractProphecyMetaFromSvg, prophecyWindowStatus, verifyProphecyPayload } from "../SigilMarkets/utils/prophecySigil";
 
 /* ────────────────────────────────────────────────────────────────
    Utilities
@@ -280,12 +281,15 @@ export default function VerifyPage(): ReactElement {
 
   const [zkVerify, setZkVerify] = useState<boolean | null>(null);
   const [zkVkey, setZkVkey] = useState<unknown>(null);
+  const [prophecyChecks, setProphecyChecks] = useState<Awaited<ReturnType<typeof verifyProphecyPayload>> | null>(null);
 
   const [receiveSig, setReceiveSig] = useState<ReceiveSig | null>(null);
 
   const [dragActive, setDragActive] = useState<boolean>(false);
 
   const { pulse: currentPulse } = useKaiTicker();
+  const prophecyMeta = useMemo(() => extractProphecyMetaFromSvg(svgText), [svgText]);
+  const prophecyPayload = prophecyMeta?.payload;
   const searchParams = useMemo(() => new URLSearchParams(typeof window !== "undefined" ? window.location.search : ""), []);
 
   const valuationPayload = useMemo<SigilMetadataLite | null>(() => {
@@ -652,6 +656,21 @@ export default function VerifyPage(): ReactElement {
     };
   }, [zkMeta, zkVkey]);
 
+  React.useEffect(() => {
+    let active = true;
+    (async () => {
+      if (!prophecyPayload) {
+        if (active) setProphecyChecks(null);
+        return;
+      }
+      const checks = await verifyProphecyPayload(prophecyPayload);
+      if (active) setProphecyChecks(checks);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [prophecyPayload]);
+
   const badge: { kind: BadgeKind; title: string; subtitle?: string } = useMemo(() => {
     if (busy) return { kind: "busy", title: "SEALING", subtitle: "Deterministic proof rails executing." };
     if (result.status === "ok") return { kind: "ok", title: "PROOF OF BREATH™", subtitle: "Human-origin seal affirmed." };
@@ -664,6 +683,11 @@ export default function VerifyPage(): ReactElement {
     [result, slug.pulse],
   );
   const kpiPhiKey = useMemo(() => (result.status === "ok" ? result.derivedPhiKey || "—" : "—"), [result]);
+
+  const prophecyWindow = useMemo(() => {
+    if (!prophecyPayload) return null;
+    return prophecyWindowStatus(prophecyPayload.expirationPulse, currentPulse);
+  }, [currentPulse, prophecyPayload]);
 
   const sealKAS: SealState = useMemo(() => {
     if (busy) return "busy";
@@ -1012,6 +1036,37 @@ export default function VerifyPage(): ReactElement {
                     label={displaySource === "balance" ? "Glyph USD balance" : displaySource === "embedded" ? "Glyph USD value" : "Live USD value"}
                     value={displayUsd == null ? "—" : fmtUsd(displayUsd)}
                   />
+                </div>
+              ) : null}
+
+              {prophecyPayload ? (
+                <div className="vrail-grid vrail-grid--2" aria-label="Prophecy verification">
+                  <div className="vrow">
+                    <span className="vk">prophecy</span>
+                    <code className="vv mono" title={prophecyPayload.text}>
+                      {ellipsizeMiddle(prophecyPayload.text, 26, 16)}
+                    </code>
+                  </div>
+                  <div className="vrow">
+                    <span className="vk">window</span>
+                    <code className="vv mono">{prophecyWindow ?? "—"}</code>
+                  </div>
+                  <div className="vrow">
+                    <span className="vk">canonicalHash</span>
+                    <code className="vv mono">{prophecyChecks?.canonicalHashMatches == null ? "—" : String(prophecyChecks.canonicalHashMatches)}</code>
+                  </div>
+                  <div className="vrow">
+                    <span className="vk">signature</span>
+                    <code className="vv mono">{prophecyChecks?.signatureMatches == null ? "—" : String(prophecyChecks.signatureMatches)}</code>
+                  </div>
+                  <div className="vrow">
+                    <span className="vk">zk proof</span>
+                    <code className="vv mono">{zkVerify == null ? "—" : String(zkVerify)}</code>
+                  </div>
+                  <div className="vrow">
+                    <span className="vk">expiry pulse</span>
+                    <code className="vv mono">{prophecyPayload.expirationPulse ?? "—"}</code>
+                  </div>
                 </div>
               ) : null}
 

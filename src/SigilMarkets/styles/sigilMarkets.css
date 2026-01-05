@@ -3082,6 +3082,93 @@ body{
   flex-wrap: wrap;
 }
 
+.sm-proph-form{
+  margin-top: 12px;
+  display: grid;
+  gap: 12px;
+}
+
+.sm-seal-grid{
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.sm-evidence-row{
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.sm-evidence-list{
+  margin-top: 8px;
+  display: grid;
+  gap: 6px;
+}
+
+.sm-evidence-item{
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.04);
+}
+
+.sm-evidence-remove{
+  border: 0;
+  background: transparent;
+  color: rgba(255,255,255,0.6);
+  cursor: pointer;
+}
+
+.sm-seal-footer{
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.sm-proof-row{
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.sm-vault-tabs{
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.sm-vault-proph-list{
+  display: grid;
+  gap: 12px;
+}
+
+.sm-vault-proph-text{
+  margin-top: 6px;
+  font-size: 13px;
+  color: rgba(255,255,255,0.88);
+  white-space: pre-wrap;
+}
+
+.sm-vault-sigil-card{
+  border: 1px solid rgba(255,255,255,0.10);
+}
+
+.sm-error{
+  color: rgba(255,80,80,0.92);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .sm-select{
   width: 100%;
   padding: 10px 12px;

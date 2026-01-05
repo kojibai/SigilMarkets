@@ -3,7 +3,7 @@
 
 import type { Market, MarketOutcome } from "../types/marketTypes";
 import type { PositionRecord } from "../types/sigilPositionTypes";
-import type { ProphecyRecord } from "../state/feedStore";
+import type { ProphecyRecord } from "../types/prophecyTypes";
 import { shortKey } from "./format";
 
 export type ShareContext = Readonly<{
@@ -55,18 +55,16 @@ export const shareTextForPosition = (p: PositionRecord, marketQuestion?: string,
     .join("\n");
 };
 
-export const shareTextForProphecy = (p: ProphecyRecord, marketQuestion?: string, ctx?: ShareContext): string => {
+export const shareTextForProphecy = (p: ProphecyRecord, _marketQuestion?: string, ctx?: ShareContext): string => {
   const app = ctx?.appName ?? "Sigil Markets";
-  const q = marketQuestion ?? "Prophecy";
   const author = shortKey(p.author.userPhiKey as unknown as string);
   return [
-    `Prophecy sealed • ${p.side}`,
-    q,
+    `Prophecy sealed`,
+    p.text,
+    p.category ? `• category: ${p.category}` : "",
     `• sealed: pulse ${p.createdAt.pulse}`,
+    p.expirationPulse ? `• expires: pulse ${p.expirationPulse}` : "",
     `• by: ${author}`,
-    p.resolution
-      ? `• result: ${p.resolution.status} (${fmtOutcome(p.resolution.outcome as MarketOutcome)})`
-      : `• result: pending`,
     `— ${app}`,
   ]
     .filter(Boolean)

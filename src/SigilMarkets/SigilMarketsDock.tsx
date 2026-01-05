@@ -66,12 +66,12 @@ export const SigilMarketsDock = (props: SigilMarketsDockProps) => {
   const sfx = useSfx();
 
   const { counts: positionCounts } = usePositions();
-  const { counts: prophecyCounts } = useProphecyFeed({ visibility: "all", includeResolved: false });
+  const { counts: prophecyCounts } = useProphecyFeed({ includeExpired: false, nowPulse: props.now.pulse });
 
   const activeTab = useMemo(() => activeTabFromRoute(state.route.view), [state.route.view]);
 
   const badgePositions = positionCounts.claimable;
-  const badgeProphecy = prophecyCounts.sealed;
+  const badgeProphecy = prophecyCounts.open;
 
   const go = (tab: DockTab): void => {
     haptics.fire("tap");

@@ -1,7 +1,7 @@
 // SigilMarkets/views/Prophecy/ProphecyReplay.tsx
 "use client";
 
-import type { ProphecyRecord } from "../../state/feedStore";
+import type { ProphecyRecord } from "../../types/prophecyTypes";
 import { Card, CardContent } from "../../ui/atoms/Card";
 import { Divider } from "../../ui/atoms/Divider";
 
@@ -12,7 +12,7 @@ export const ProphecyReplay = (props: Readonly<{ prophecy: ProphecyRecord }>) =>
       <CardContent>
         <div className="sm-title" style={{ fontSize: 14 }}>Replay</div>
         <div className="sm-subtitle" style={{ marginTop: 6 }}>
-          sealed pulse {p.createdAt.pulse} • side {p.side}
+          sealed pulse {p.createdAt.pulse} • prophecy {p.textEnc}
         </div>
         <Divider />
         <div className="sm-small">

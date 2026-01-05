@@ -11,6 +11,7 @@ import { formatPhiMicro } from "../../utils/format";
 import { TopBar } from "../../ui/chrome/TopBar";
 import { Card, CardContent } from "../../ui/atoms/Card";
 import { Button } from "../../ui/atoms/Button";
+import { Chip } from "../../ui/atoms/Chip";
 import { Divider } from "../../ui/atoms/Divider";
 import { Icon } from "../../ui/atoms/Icon";
 
@@ -21,6 +22,7 @@ import { VaultGrowthLine } from "./VaultGrowthLine";
 import { VaultStreak } from "./VaultStreak";
 import { VaultActions } from "./VaultActions";
 import { DepositWithdrawSheet } from "./DepositWithdrawSheet";
+import { VaultProphecies } from "./VaultProphecies";
 
 export type VaultPanelProps = Readonly<{
   vaultId?: VaultId;
@@ -44,6 +46,7 @@ export const VaultPanel = (props: VaultPanelProps) => {
   const [dwOpen, setDwOpen] = useState<boolean>(false);
   const [dwMode, setDwMode] = useState<"deposit" | "withdraw">("deposit");
   const [isCompactAmount, setIsCompactAmount] = useState(false);
+  const [view, setView] = useState<"overview" | "prophecies">("overview");
 
   const title = "Vault";
 
@@ -138,61 +141,78 @@ export const VaultPanel = (props: VaultPanelProps) => {
       <div className="sm-vault-stack">
         <VaultSigilCard vault={vault} now={props.now} />
 
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <div className="sm-small">
-            locks active: {lockedCount} • total records: {locks.length}
-          </div>
-
-          {isActiveVault ? (
-            <div className="sm-small">active vault</div>
-          ) : (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => vaultActions.setActiveVault(vault.vaultId)}
-              leftIcon={<Icon name="check" size={14} tone="dim" />}
-            >
-              Set active
-            </Button>
-          )}
-
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              vaultActions.setActiveVault(null);
-              ui.toast("info", "Vault cleared", "Active vault disabled");
-              ui.navigate({ view: "grid" });
-            }}
-            leftIcon={<Icon name="warning" size={14} tone="gold" />}
-          >
-            Deactivate
-          </Button>
+        <div className="sm-vault-tabs">
+          <Chip size="sm" selected={view === "overview"} onClick={() => setView("overview")} tone="gold">
+            Overview
+          </Chip>
+          <Chip size="sm" selected={view === "prophecies"} onClick={() => setView("prophecies")} variant="outline">
+            Prophecies
+          </Chip>
         </div>
 
-        <div className="sm-vault-row">
-          <VaultBalance vault={vault} />
-          <VaultStreak vault={vault} now={props.now} />
-        </div>
+        {view === "prophecies" ? (
+          <VaultProphecies now={props.now} authorPhiKey={String(vault.owner.userPhiKey)} />
+        ) : null}
 
-        <VaultGrowthLine vault={vault} now={props.now} />
+        {view !== "prophecies" ? (
+          <>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+              <div className="sm-small">
+                locks active: {lockedCount} • total records: {locks.length}
+              </div>
 
-        <VaultLocks vault={vault} />
+              {isActiveVault ? (
+                <div className="sm-small">active vault</div>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => vaultActions.setActiveVault(vault.vaultId)}
+                  leftIcon={<Icon name="check" size={14} tone="dim" />}
+                >
+                  Set active
+                </Button>
+              )}
 
-        <Divider />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  vaultActions.setActiveVault(null);
+                  ui.toast("info", "Vault cleared", "Active vault disabled");
+                  ui.navigate({ view: "grid" });
+                }}
+                leftIcon={<Icon name="warning" size={14} tone="gold" />}
+              >
+                Deactivate
+              </Button>
+            </div>
 
-        <VaultActions
-          vault={vault}
-          now={props.now}
-          onDeposit={() => {
-            setDwMode("deposit");
-            setDwOpen(true);
-          }}
-          onWithdraw={() => {
-            setDwMode("withdraw");
-            setDwOpen(true);
-          }}
-        />
+            <div className="sm-vault-row">
+              <VaultBalance vault={vault} />
+              <VaultStreak vault={vault} now={props.now} />
+            </div>
+
+            <VaultGrowthLine vault={vault} now={props.now} />
+
+            <VaultLocks vault={vault} />
+
+            <Divider />
+
+            <VaultActions
+              vault={vault}
+              now={props.now}
+              onDeposit={() => {
+                setDwMode("deposit");
+                setDwOpen(true);
+              }}
+              onWithdraw={() => {
+                setDwMode("withdraw");
+                setDwOpen(true);
+              }}
+            />
+          </>
+        ) : null}
       </div>
 
       <DepositWithdrawSheet open={dwOpen} mode={dwMode} onClose={() => setDwOpen(false)} vault={vault} now={props.now} />

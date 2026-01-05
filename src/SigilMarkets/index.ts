@@ -23,6 +23,7 @@ export { SigilMarketsMarketProvider, useSigilMarketsMarketStore, useMarkets, use
 export { SigilMarketsVaultProvider, useSigilMarketsVaultStore, useActiveVault, useVaultById } from "./state/vaultStore";
 export { SigilMarketsPositionProvider, useSigilMarketsPositionStore } from "./state/positionStore";
 export { SigilMarketsFeedProvider, useSigilMarketsFeedStore } from "./state/feedStore";
+export { SigilMarketsProphecyProvider, useSigilMarketsProphecyStore, useProphecyList } from "./state/prophecyStore";
 export { SigilMarketsRuntimeConfigProvider, useSigilMarketsRuntimeConfig } from "./state/runtimeConfig";
 
 /** Hooks */
@@ -64,4 +65,5 @@ export * from "./types/marketTypes";
 export * from "./types/vaultTypes";
 export * from "./types/sigilPositionTypes";
 export * from "./types/oracleTypes";
+export * from "./types/prophecyTypes";
 export * from "./types/uiTypes";
