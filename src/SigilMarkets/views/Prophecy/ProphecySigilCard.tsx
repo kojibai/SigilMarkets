@@ -71,7 +71,7 @@ export const ProphecySigilCard = (props: ProphecySigilCardProps) => {
           <div className="sm-proph-sigil-actions">
             {sigil?.url ? (
               <a className="sm-pill" href={sigil.url} target="_blank" rel="noreferrer">
-                <Icon name="share" size={14} tone="dim" /> view svg
+                <Icon name="share" size={14} tone="dim" /> view sigil
               </a>
             ) : null}
 

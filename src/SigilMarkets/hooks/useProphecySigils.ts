@@ -8,7 +8,7 @@ import type { ProphecyRecord, ProphecySigilArtifact } from "../types/prophecySig
 import { useActiveVault } from "../state/vaultStore";
 import { useSigilMarketsUi } from "../state/uiStore";
 import { useSigilMarketsProphecySigilStore } from "../state/prophecySigilStore";
-import { momentFromUTC } from "../../utils/kai_pulse";
+import { momentFromUTC, STEPS_BEAT } from "../../utils/kai_pulse";
 import { canonicalizeEvidenceBundleV2 } from "../api/oracleApi";
 import { computeZkPoseidonHash } from "../../utils/kai";
 import { buildProofHints, generateZkProofFromPoseidonHash } from "../../utils/zkProof";
@@ -20,6 +20,7 @@ import {
   toMicroDecimal,
 } from "../utils/prophecySigil";
 import { registerSigilUrl } from "../../utils/sigilRegistry";
+import { makeSigilUrlLoose, type SigilSharePayloadLoose } from "../../utils/sigilUrl";
 import { asSvgHash } from "../types/vaultTypes";
 
 export type SealProphecyRequest = Readonly<{
@@ -142,7 +143,23 @@ export const useProphecySigils = (): UseProphecySigilsResult => {
 
       sigilId = typeof body.sigilId === "string" ? body.sigilId : sigilId;
       const svgHash = asSvgHash(body.svgHash);
-      const sigilUrl = `/sigils/${sigilId}.svg`;
+      const svgUrl = `/sigils/${sigilId}.svg`;
+      const sharePayload: SigilSharePayloadLoose = {
+        pulse: payload.pulse,
+        beat: payload.beat,
+        stepIndex: payload.stepIndex,
+        stepPct: payload.stepPct,
+        chakraDay: payload.chakraDay as SigilSharePayloadLoose["chakraDay"],
+        stepsPerBeat: STEPS_BEAT,
+        kaiSignature: payload.kaiSignature,
+        userPhiKey: payload.userPhiKey,
+        canonicalHash: payload.canonicalHash,
+        sigilKind: "prophecy",
+        sigilId: payload.prophecyId,
+        prophecyPayload: payload,
+        svgUrl,
+      };
+      const sigilUrl = makeSigilUrlLoose(payload.canonicalHash, sharePayload);
 
       const sigil: ProphecySigilArtifact = {
         sigilId: prophecyId,
