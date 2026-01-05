@@ -1118,7 +1118,8 @@ const kksSigil = useMemo(() => deriveKksForPulseNumber(pulseForSigil), [pulseFor
   type SigilSharePayloadExtended = SigilSharePayload & {
     canonicalHash: string;
     exportedAt: string;
-    expiresAtPulse: string; // bigint exact
+    expiresAtPulse: number;
+    expiresAtPulseExact: string; // bigint exact
     pulseExact: string; // bigint exact
     pulseSigil: number; // the pulse number actually used in the SVG (wrapped-safe)
   };
@@ -1158,7 +1159,8 @@ const kksSigil = useMemo(() => deriveKksForPulseNumber(pulseForSigil), [pulseFor
       stepsPerBeat,
       canonicalHash,
       exportedAt: isoFromPulse(pulseSnapshot),
-      expiresAtPulse: (pulseSnapshot + 11n).toString(),
+      expiresAtPulse: Number(pulseSnapshot + 11n),
+      expiresAtPulseExact: (pulseSnapshot + 11n).toString(),
       pulseExact: pulseSnapshot.toString(),
       pulseSigil,
     };
