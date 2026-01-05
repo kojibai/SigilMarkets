@@ -118,11 +118,19 @@ export const useProphecySigils = (): UseProphecySigilsResult => {
         },
       };
 
-      const res = await fetch("/sigils/seal", {
+      let res = await fetch("/sigils/seal", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ kind: "prophecy", payload, textEncoded: encoded }),
       });
+
+      if (res.status === 404) {
+        res = await fetch("/api/sigils/seal", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ kind: "prophecy", payload, textEncoded: encoded }),
+        });
+      }
 
       if (!res.ok) {
         return { ok: false, error: "seal failed" };

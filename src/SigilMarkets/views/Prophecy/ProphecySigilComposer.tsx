@@ -13,6 +13,7 @@ import { Chip } from "../../ui/atoms/Chip";
 import { Divider } from "../../ui/atoms/Divider";
 import { Icon } from "../../ui/atoms/Icon";
 import { useProphecySigils } from "../../hooks/useProphecySigils";
+import { momentFromUTC } from "../../../utils/kai_pulse";
 
 export type ProphecySigilComposerProps = Readonly<{
   now: KaiMoment;
@@ -65,6 +66,8 @@ export const ProphecySigilComposer = (props: ProphecySigilComposerProps) => {
     return { items: evidenceItems };
   }, [evidenceItems]);
 
+  const liveMoment = useMemo(() => momentFromUTC(), [props.now.pulse, props.now.beat, props.now.stepIndex]);
+
   useEffect(() => {
     if (!busy && zkStatus === "ready") setZkStatus("idle");
   }, [busy, category, escrowRaw, expirationRaw, evidenceItems, text, zkStatus]);
@@ -106,7 +109,7 @@ export const ProphecySigilComposer = (props: ProphecySigilComposerProps) => {
       return;
     }
 
-    if (expirationPulse != null && expirationPulse < props.now.pulse) {
+    if (expirationPulse != null && expirationPulse < liveMoment.pulse) {
       setError("Expiration pulse must be current or future.");
       return;
     }
@@ -238,7 +241,9 @@ export const ProphecySigilComposer = (props: ProphecySigilComposerProps) => {
         <Divider />
 
         <div className="sm-proph-sigil-status">
-          <div className="sm-small">Seals at p{props.now.pulse} • beat {props.now.beat} • step {props.now.stepIndex}</div>
+          <div className="sm-small">
+            Seals at p{liveMoment.pulse} • beat {liveMoment.beat} • step {liveMoment.stepIndex}
+          </div>
           <div className="sm-proph-sigil-badges">
             <Chip size="sm" selected={false} variant="outline" tone={activeVault ? "gold" : "default"}>
               Signature {activeVault ? "✓" : "–"}
