@@ -47,10 +47,11 @@ export function runOgImageEffect(params: {
       const subtitle = `Pulse ${pulseStr.toLocaleString()} • Beat ${payload.beat}/36 • Step ${stepIdx + 1}/${stepsNum} • ${chakra}`;
 
 
+      const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
       const stageCanvas = await html2canvas(el as HTMLElement, {
         backgroundColor: null,
         logging: false,
-        scale: 1,
+        scale: Math.min(dpr, 1.5),
       });
 
       const canvas = document.createElement("canvas");
