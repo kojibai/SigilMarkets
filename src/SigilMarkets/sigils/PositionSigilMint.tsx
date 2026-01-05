@@ -1477,10 +1477,20 @@ const amountW = wholeW + fracW;
       style="paint-order: stroke; stroke: rgba(0,0,0,0.62); stroke-width: 2.0; letter-spacing: 6.4;"
       filter="url(#etchStrong)"
     >
-      <tspan font-size="22" opacity="0.9">${esc(isClaim ? "VICTORY" : seal.zkOk ? "VERIFIED" : "SEALED")}</tspan>
+      <tspan font-size="22" opacity="0.9">${esc(
+        isClaim
+          ? payload.outcome === "VOID"
+            ? "VOID"
+            : payload.side === payload.outcome
+              ? "VICTORY"
+              : "SETTLED"
+          : seal.zkOk
+            ? "VERIFIED"
+            : "SEALED",
+      )}</tspan>
     </text>
     ${
-      isClaim
+      isClaim && payload.side === payload.outcome
         ? `<text
       x="500"
       y="448"
@@ -1491,7 +1501,7 @@ const amountW = wholeW + fracW;
       style="paint-order: stroke; stroke: rgba(0,0,0,0.55); stroke-width: 1.6; letter-spacing: 4.8;"
       filter="url(#etchStrong)"
     >
-      <tspan font-size="14" opacity="0.85">OMG WOW • YOU WON</tspan>
+      <tspan font-size="14" opacity="0.85">PURE HARMONIC ENTRAINMENT • ULTRA LUXE</tspan>
     </text>`
         : ""
     }
