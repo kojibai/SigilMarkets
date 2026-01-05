@@ -1,7 +1,6 @@
 // SigilMarkets/ui/chrome/AppFooter.tsx
 "use client";
 
-import React from "react";
 import { APP_NAME, APP_VERSION, GITHUB_REPO_URL } from "../../../config/buildInfo";
 import "../../styles/appFooter.css";
 
