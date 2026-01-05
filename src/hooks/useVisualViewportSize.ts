@@ -28,10 +28,13 @@ function readVVNow(): VVSize {
 
   const vv = window.visualViewport;
   if (vv) {
+    const vvHeight = Math.round(vv.height);
+    const winHeight = Math.round(window.innerHeight);
+    const keyboardClosed = Math.abs(winHeight - vvHeight) <= 40;
     return {
       width: Math.round(vv.width),
-      height: Math.round(vv.height),
-      offsetTop: Math.round(vv.offsetTop),
+      height: keyboardClosed ? winHeight : vvHeight,
+      offsetTop: keyboardClosed ? 0 : Math.round(vv.offsetTop),
       offsetLeft: Math.round(vv.offsetLeft),
     };
   }
@@ -73,12 +76,17 @@ function startVVListeners(): void {
     vvStore.rafId = window.requestAnimationFrame(publish);
   };
 
+  const scheduleLater = (): void => {
+    schedule();
+    window.setTimeout(schedule, 250);
+  };
+
   const vv = window.visualViewport;
 
   window.addEventListener("resize", schedule, { passive: true });
   window.addEventListener("orientationchange", schedule, { passive: true });
-  window.addEventListener("focusin", schedule, { passive: true });
-  window.addEventListener("focusout", schedule, { passive: true });
+  window.addEventListener("focusin", scheduleLater, { passive: true });
+  window.addEventListener("focusout", scheduleLater, { passive: true });
   if (vv) {
     vv.addEventListener("resize", schedule, { passive: true });
     vv.addEventListener("scroll", schedule, { passive: true });
