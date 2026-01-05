@@ -58,7 +58,7 @@ async function loadGroth16(): Promise<Groth16 | null> {
   try {
     const spec = "snarkjs";
     type SnarkjsDynamic = { groth16?: unknown; default?: { groth16?: unknown } };
-    const mod = (await import(/* @vite-ignore */ spec)) as unknown as SnarkjsDynamic;
+    const mod = (await import(spec)) as unknown as SnarkjsDynamic;
     const candidate = mod.groth16 ?? mod.default?.groth16;
     if (isGroth16(candidate)) return candidate;
   } catch (err) {
