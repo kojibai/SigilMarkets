@@ -479,6 +479,8 @@ export default function SigilPage() {
     () => (prophecyPayload ? { prophecyPayload } : undefined),
     [prophecyPayload],
   );
+  const prophecyPhiKey = prophecyPayload?.userPhiKey ?? null;
+  const prophecyKaiSignature = prophecyPayload?.kaiSignature ?? null;
 
   const prophecyDetails = useMemo<ProphecyDetails | null>(() => {
     if (!prophecyPayload) return null;
@@ -1464,14 +1466,16 @@ const openHistoryPress = useFastPress<HTMLButtonElement>(() => setHistoryOpen(tr
       const rawAmount = (meta as Partial<{ claimExtendAmount?: unknown }>).claimExtendAmount;
       const amountForShare: number | null = typeof rawAmount === "number" ? rawAmount : null;
 
+      const resolvedUserPhiKey = meta.userPhiKey ?? prophecyPhiKey;
+      const resolvedKaiSignature = meta.kaiSignature ?? prophecyKaiSignature;
       const shareable: ShareableSigilMeta = {
         pulse: meta.pulse,
         beat: meta.beat,
         chakraDay: meta.chakraDay ?? "Root",
         stepsPerBeat: stepsNum,
         stepIndex: sealedStepIndex,
-        userPhiKey: meta.userPhiKey ?? null,
-        kaiSignature: meta.kaiSignature ?? null,
+        userPhiKey: resolvedUserPhiKey ?? null,
+        kaiSignature: resolvedKaiSignature ?? null,
         canonicalHash: canonical,
         transferNonce: meta.transferNonce ?? null,
         expiresAtPulse: meta.expiresAtPulse ?? null,
@@ -1510,7 +1514,7 @@ current.searchParams.forEach((v, k) => {
       setSealOpen(true);
       return finalUrl;
     },
-    [localHash, routeHash, prophecyPayloadExtras]
+    [localHash, routeHash, prophecyKaiSignature, prophecyPayloadExtras, prophecyPhiKey]
   );
 
   /* 11-breath upgrade claim window helper */
@@ -1693,8 +1697,8 @@ current.searchParams.forEach((v, k) => {
             stepIndex: payload.stepIndex ?? null,
             exportedAtPulse: payload.exportedAtPulse ?? null,
             canonicalHash: payload.canonicalHash ?? null,
-            userPhiKey: payload.userPhiKey ?? null,
-            kaiSignature: payload.kaiSignature ?? null,
+            userPhiKey: payload.userPhiKey ?? prophecyPhiKey ?? null,
+            kaiSignature: payload.kaiSignature ?? prophecyKaiSignature ?? null,
             transferNonce: payload.transferNonce ?? null,
             expiresAtPulse: payload.expiresAtPulse ?? null,
             claimExtendUnit: unitForExport,

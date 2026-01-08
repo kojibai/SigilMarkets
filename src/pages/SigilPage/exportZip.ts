@@ -295,6 +295,9 @@ export async function exportZIP(ctx: {
       shareUrl: fullUrlForManifest, // hint for consumers
       fullUrl: fullUrlForManifest,  // alias
     };
+    if (typeof metaForSvg.userPhiKey === "string" && !metaForSvg.phiKey) {
+      metaForSvg.phiKey = metaForSvg.userPhiKey;
+    }
     putMetadata(svgEl, metaForSvg);
 
     // Display-only exposure (non-canonical marker)
