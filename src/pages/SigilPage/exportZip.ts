@@ -58,6 +58,7 @@ export type ExportableSigilMeta = {
   /** misc */
   attachment?: { name?: string | null } | null;
   provenance?: Array<Record<string, unknown>> | null;
+  payloadExtras?: Record<string, unknown>;
 };
 
 /** Coerce any free-form value into a valid ChakraDay; default to "Root". */
@@ -240,6 +241,7 @@ export async function exportZIP(ctx: {
       claimExtendUnit: payload.claimExtendUnit ?? expiryUnit,
       claimExtendAmount: payload.claimExtendAmount ?? expiryAmount,
       canonicalHash: (localHash || payload.canonicalHash || routeHash || null)?.toString() ?? null,
+      payloadExtras: payload.payloadExtras,
     };
 
     // canonical Σ and Φ (0-based stepIndex)
@@ -258,8 +260,11 @@ export async function exportZIP(ctx: {
     const claimedMetaCanon: ExportableSigilMeta = {
       ...claimedMeta,
       kaiSignature: canonicalSig,
-      userPhiKey: claimedMeta.userPhiKey || phiKeyCanon,
+      userPhiKey: phiKeyCanon,
     };
+    svgEl.setAttribute("data-kai-signature", canonicalSig);
+    svgEl.setAttribute("data-phi-key", phiKeyCanon);
+    const payloadExtras = claimedMetaCanon.payloadExtras ?? {};
 
     // Build the canonical share URL for manifest — canonical is in the path, NOT the payload
     const canonicalLower = (localHash || routeHash || "").toLowerCase();
@@ -279,18 +284,22 @@ export async function exportZIP(ctx: {
 
     const fullUrlForManifest = rewriteUrlPayload(
       baseUrlForManifest,
-      sharePayloadForManifest,
+      { ...payloadExtras, ...sharePayloadForManifest },
       tokenForManifest
     );
 
     // Canonical payload write only (single call) — include URL hints for readers
     const { putMetadata } = await import("../../utils/svgMeta");
     const metaForSvg: Record<string, unknown> = {
+      ...payloadExtras,
       ...claimedMetaCanon,
       stepsPerBeat: stepsNum,
       shareUrl: fullUrlForManifest, // hint for consumers
       fullUrl: fullUrlForManifest,  // alias
     };
+    if (typeof metaForSvg.userPhiKey === "string" && !metaForSvg.phiKey) {
+      metaForSvg.phiKey = metaForSvg.userPhiKey;
+    }
     putMetadata(svgEl, metaForSvg);
 
     // Display-only exposure (non-canonical marker)
@@ -383,6 +392,7 @@ export async function exportZIP(ctx: {
       fullUrl: fullUrlForManifest,
       p: pValue,
       urlQuery: { p: pValue, t: tValue },
+      payloadExtras: Object.keys(payloadExtras).length ? payloadExtras : null,
     };
     const manifestHash = await sha256HexCanon(stableStringify(manifestPayload));
     const manifest = { ...manifestPayload, manifestHash };
