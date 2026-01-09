@@ -187,6 +187,7 @@ export const ExportPositionSheet = (props: ExportPositionSheetProps) => {
               pngSizePx={2048}
               mode="zip"
               label={exportLabel}
+              allowMissingZkProof={p.status === "lost"}
             />
           ) : (
             <Button
