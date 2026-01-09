@@ -9,6 +9,9 @@ const clampPulse = (p: KaiPulse): number => {
 };
 
 export const deriveMarketStatus = (market: Market, nowPulse: KaiPulse): MarketStatus => {
+  if (market.state.resolution) {
+    return market.state.resolution.outcome === "VOID" ? "voided" : "resolved";
+  }
   const status = market.state.status;
   if (status === "resolved" || status === "voided" || status === "canceled") return status;
   if (status === "resolving" || status === "closed") return status;
